@@ -30,7 +30,7 @@ size_t enum_modules_in_process(DWORD process_id, std::map<ULONGLONG, MODULEENTRY
     return modules;
 }
 
-char* get_exported_func_name(PVOID modulePtr, ULONGLONG searchedRVA)
+char* get_exported_func_name(PVOID modulePtr, DWORD searchedRVA)
 {
     IMAGE_DATA_DIRECTORY *exportsDir = get_pe_directory(modulePtr, IMAGE_DIRECTORY_ENTRY_EXPORT);
     if (exportsDir == NULL) return NULL;
@@ -40,6 +40,8 @@ char* get_exported_func_name(PVOID modulePtr, ULONGLONG searchedRVA)
 
     IMAGE_EXPORT_DIRECTORY* exp = (IMAGE_EXPORT_DIRECTORY*)(expAddr + (ULONG_PTR) modulePtr);
     SIZE_T namesCount = exp->NumberOfNames;
+
+	std::map<DWORD, char*> rva_to_name;
 
     DWORD funcsListRVA = exp->AddressOfFunctions;
     DWORD funcNamesListRVA = exp->AddressOfNames;
@@ -52,12 +54,29 @@ char* get_exported_func_name(PVOID modulePtr, ULONGLONG searchedRVA)
         DWORD* funcRVA = (DWORD*)(funcsListRVA + (BYTE*) modulePtr + (*nameIndex) * sizeof(DWORD));
 
         LPSTR name = (LPSTR)(*nameRVA + (BYTE*) modulePtr);
+		rva_to_name[(*funcRVA)] = name;
         if (searchedRVA == (*funcRVA)) {
             return name;
         }
     }
-    //function not found
-    return NULL;
+	printf("Exact match not found! The function beginning is possibly stolen.\n");
+	// exact match not found...
+	std::map<DWORD, char*>::iterator itr1;
+	std::map<DWORD, char*>::iterator lastEl = rva_to_name.upper_bound(searchedRVA);
+	if (lastEl == rva_to_name.end()) {
+		return NULL;
+	}
+	if (lastEl == rva_to_name.begin()) {
+		return NULL;
+	}
+	lastEl--;
+	DWORD dif = searchedRVA - lastEl->first;
+	printf("Closest match at RVA: %X\n", lastEl->first);
+	printf("%X = %s + %X\n", searchedRVA, lastEl->second, dif);
+	if (lastEl->first < searchedRVA) {
+		return lastEl->second;
+	}
+	return NULL;
 }
 
 void log_info(FILE *f, MODULEENTRY32 &module_entry)
@@ -119,7 +138,7 @@ int main(int argc, char *argv[])
         ULONGLONG end = itr1->second.modBaseSize + begin;
         
         if (searchedAddr >= begin && searchedAddr < end) {
-            ULONGLONG searchedRVA = searchedAddr - begin;
+            DWORD searchedRVA = DWORD(searchedAddr - begin);
 			printf("[+] Address found:\n");
             printf("Module: %s\n", itr1->second.szExePath);
 
@@ -132,7 +151,6 @@ int main(int argc, char *argv[])
 			char *func_name = get_exported_func_name(foundMod, searchedRVA);
             if (func_name) {
 				printf("Function: %s\n", func_name);
-				printf("RVA: %llX\n", searchedRVA);
 			} else {
 				printf("Function not found!\n");
 			}

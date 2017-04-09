@@ -160,60 +160,6 @@ BYTE* map_pe(char *filename, size_t &v_size)
     return mappedDLL;
 }
 
-char* get_exported_func_name(const BYTE* modulePtr, DWORD searchedRVA)
-{
-    IMAGE_DATA_DIRECTORY *exportsDir = get_pe_directory(modulePtr, IMAGE_DIRECTORY_ENTRY_EXPORT);
-    if (exportsDir == NULL) return NULL;
-
-    DWORD expAddr = exportsDir->VirtualAddress;
-    if (expAddr == 0) return NULL;
-
-    IMAGE_EXPORT_DIRECTORY* exp = (IMAGE_EXPORT_DIRECTORY*)(expAddr + (ULONG_PTR) modulePtr);
-    SIZE_T namesCount = exp->NumberOfNames;
-
-    std::map<DWORD, char*> rva_to_name;
-
-    DWORD funcsListRVA = exp->AddressOfFunctions;
-    DWORD funcNamesListRVA = exp->AddressOfNames;
-    DWORD namesOrdsListRVA = exp->AddressOfNameOrdinals;
-
-    //go through names:
-    for (SIZE_T i = 0; i < namesCount; i++) {
-        DWORD* nameRVA = (DWORD*)(funcNamesListRVA + (BYTE*) modulePtr + i * sizeof(DWORD));
-        WORD* nameIndex = (WORD*)(namesOrdsListRVA + (BYTE*) modulePtr + i * sizeof(WORD));
-        DWORD* funcRVA = (DWORD*)(funcsListRVA + (BYTE*) modulePtr + (*nameIndex) * sizeof(DWORD));
-
-        LPSTR name = (LPSTR)(*nameRVA + (BYTE*) modulePtr);
-        rva_to_name[(*funcRVA)] = name;
-        if (searchedRVA == (*funcRVA)) {
-            return name;
-        }
-    }
-	printf("Exact match not found! The function beginning is possibly stolen.\n");
-    // exact match not found...
-    std::map<DWORD, char*>::iterator itr1;
-    std::map<DWORD, char*>::iterator lastEl = rva_to_name.upper_bound(searchedRVA);
-    if (lastEl == rva_to_name.end() || lastEl == rva_to_name.begin()) {
-        return NULL;
-    }
-    lastEl--;
-    DWORD dif = searchedRVA - lastEl->first;
-    printf("Closest match at RVA: %X\n", lastEl->first);
-    printf("%X = %s + %X\n", searchedRVA, lastEl->second, dif);
-    if (lastEl->first < searchedRVA) {
-        return lastEl->second;
-    }
-    return NULL;
-}
-
-void log_info(FILE *f, MODULEENTRY32 &module_entry)
-{
-    if (f == NULL) return;
-    BYTE* mod_end = module_entry.modBaseAddr + module_entry.modBaseSize;
-    fprintf(f, "%p,%p,%s\n", module_entry.modBaseAddr, mod_end, module_entry.szModule);
-    fflush(f);
-}
-
 int main(int argc, char *argv[])
 {
     ULONGLONG loadBase = 0;

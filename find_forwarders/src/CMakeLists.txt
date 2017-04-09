@@ -14,10 +14,12 @@ set (peloader_hdrs
 )
 set (srcs
 	main.cpp
+	exports_lookup.cpp
 	${peloader_srcs}
 )
 
 set (hdrs
+	exports_lookup.h
 	${peloader_hdrs}
 )
 

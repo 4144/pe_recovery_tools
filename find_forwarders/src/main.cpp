@@ -99,7 +99,7 @@ size_t make_lookup_tables(std::string moduleName, ULONGLONG remoteBase, PVOID mo
     std::string dllName = getDllName(moduleName);
     size_t forwarded_ctr = 0;
 
-    IMAGE_DATA_DIRECTORY *exportsDir = get_pe_directory(modulePtr, IMAGE_DIRECTORY_ENTRY_EXPORT);
+    IMAGE_DATA_DIRECTORY *exportsDir = get_pe_directory((const BYTE*) modulePtr, IMAGE_DIRECTORY_ENTRY_EXPORT);
     if (exportsDir == NULL) return NULL;
 
     DWORD expAddr = exportsDir->VirtualAddress;
@@ -160,7 +160,7 @@ BYTE* map_pe(char *filename, size_t &v_size)
     return mappedDLL;
 }
 
-char* get_exported_func_name(PVOID modulePtr, DWORD searchedRVA)
+char* get_exported_func_name(const BYTE* modulePtr, DWORD searchedRVA)
 {
     IMAGE_DATA_DIRECTORY *exportsDir = get_pe_directory(modulePtr, IMAGE_DIRECTORY_ENTRY_EXPORT);
     if (exportsDir == NULL) return NULL;

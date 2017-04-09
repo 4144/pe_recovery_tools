@@ -1,6 +1,6 @@
 #include "pe_raw_to_virtual.h"
 
-bool validate_ptr(LPVOID buffer_bgn, SIZE_T buffer_size, LPVOID field_bgn, SIZE_T field_size)
+bool validate_ptr(const LPVOID buffer_bgn, SIZE_T buffer_size, const LPVOID field_bgn, SIZE_T field_size)
 {
     ULONGLONG start = (ULONGLONG)buffer_bgn;
     ULONGLONG end = start + buffer_size;
@@ -17,7 +17,7 @@ bool validate_ptr(LPVOID buffer_bgn, SIZE_T buffer_size, LPVOID field_bgn, SIZE_
 }
 
 // Map raw PE into virtual memory of local process:
-bool sections_raw_to_virtual(BYTE* payload, SIZE_T destBufferSize, BYTE* destAddress)
+bool sections_raw_to_virtual(const BYTE* payload, SIZE_T destBufferSize, BYTE* destAddress)
 {
     if (payload == NULL) return false;
 
@@ -44,7 +44,7 @@ bool sections_raw_to_virtual(BYTE* payload, SIZE_T destBufferSize, BYTE* destAdd
         hdrsSize = payload_nt_hdr32->OptionalHeader.SizeOfHeaders;
         secptr = (LPVOID)((ULONGLONG)&(payload_nt_hdr32->OptionalHeader) + fileHdr->SizeOfOptionalHeader);
     }
-    if (!validate_ptr(payload, destBufferSize, payload, hdrsSize)) {
+    if (!validate_ptr((const LPVOID) payload, destBufferSize, (const LPVOID) payload, hdrsSize)) {
         return false;
     }
     //copy payload's headers:
@@ -56,7 +56,7 @@ bool sections_raw_to_virtual(BYTE* payload, SIZE_T destBufferSize, BYTE* destAdd
     SIZE_T raw_end = 0;
     for (WORD i = 0; i < fileHdr->NumberOfSections; i++) {
         PIMAGE_SECTION_HEADER next_sec = (PIMAGE_SECTION_HEADER)((ULONGLONG)secptr + (IMAGE_SIZEOF_SECTION_HEADER * i));
-        if (!validate_ptr(payload, destBufferSize, next_sec, IMAGE_SIZEOF_SECTION_HEADER)) {
+        if (!validate_ptr((const LPVOID) payload, destBufferSize, next_sec, IMAGE_SIZEOF_SECTION_HEADER)) {
             return false;
         }
         LPVOID section_mapped = destAddress + next_sec->VirtualAddress;
@@ -102,7 +102,7 @@ bool update_image_base(BYTE* payload, PVOID destImageBase)
     return true;
 }
 
-BYTE* pe_raw_to_virtual(BYTE* payload, size_t in_size, size_t &out_size)
+BYTE* pe_raw_to_virtual(const BYTE* payload, size_t in_size, size_t &out_size)
 {
     bool is64 = is64bit(payload);
 

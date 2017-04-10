@@ -1,6 +1,6 @@
 #include "pe_hdrs_helper.h"
 
-BYTE* get_nt_hrds(BYTE *pe_buffer)
+BYTE* get_nt_hrds(const BYTE *pe_buffer)
 {
 	if (pe_buffer == NULL) return NULL;
 
@@ -28,7 +28,7 @@ IMAGE_NT_HEADERS32* get_nt_hrds32(BYTE *pe_buffer)
 	return NULL;
 }
 
-IMAGE_NT_HEADERS64* get_nt_hrds64(BYTE *pe_buffer)
+IMAGE_NT_HEADERS64* get_nt_hrds64(const BYTE *pe_buffer)
 {
 	BYTE *ptr = get_nt_hrds(pe_buffer);
 	if (ptr == NULL) return NULL;
@@ -40,7 +40,7 @@ IMAGE_NT_HEADERS64* get_nt_hrds64(BYTE *pe_buffer)
 	return NULL;
 }
 
-bool is64bit(BYTE *pe_buffer)
+bool is64bit(const BYTE *pe_buffer)
 {
 	BYTE *ptr = get_nt_hrds(pe_buffer);
 	if (ptr == NULL) return false;
@@ -52,7 +52,7 @@ bool is64bit(BYTE *pe_buffer)
 	return false;
 }
 
-IMAGE_DATA_DIRECTORY* get_pe_directory(PVOID pe_buffer, DWORD dir_id)
+IMAGE_DATA_DIRECTORY* get_pe_directory(const BYTE *pe_buffer, DWORD dir_id)
 {
 	if (dir_id >= IMAGE_NUMBEROF_DIRECTORY_ENTRIES) return NULL;
 

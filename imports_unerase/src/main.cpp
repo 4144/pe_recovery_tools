@@ -6,7 +6,9 @@
 #include <iostream>
 
 #include "peloader/pe_hdrs_helper.h"
-#include "peloader/load_imports.h"
+#include "peloader/pe_raw_to_virtual.h"
+#include "peloader/fix_imports.h"
+
 
 size_t enum_modules_in_process(DWORD process_id, std::map<ULONGLONG, MODULEENTRY32> &modulesMap)
 {
@@ -31,30 +33,44 @@ size_t enum_modules_in_process(DWORD process_id, std::map<ULONGLONG, MODULEENTRY
     return modules;
 }
 
-void find_function_at_addr(std::map<ULONGLONG, MODULEENTRY32> modulesMap, ULONGLONG searchedAddr)
+bool prepare_mapping(DWORD pid, 
+                    std::map<std::string, std::set<std::string>> &forwarders_lookup, 
+                    std::map<ULONGLONG, std::set<std::string>> &va_to_names,
+                    std::map<std::string, ULONGLONG> &name_to_va
+                    )
 {
-    std::map<ULONGLONG, MODULEENTRY32>::iterator lastEl = modulesMap.lower_bound(searchedAddr);
-    std::map<ULONGLONG, MODULEENTRY32>::iterator itr1;
-    HMODULE foundMod = NULL;
-    for (itr1 = modulesMap.begin(); itr1 != lastEl; itr1++) {
-        ULONGLONG begin = itr1->first;
-        ULONGLONG end = itr1->second.modBaseSize + begin;
-        
-        if (searchedAddr >= begin && searchedAddr < end) {
-            ULONGLONG searchedRVA = searchedAddr - begin;
-
-            printf("Found address in the module: %s\n", itr1->second.szExePath);
-            printf("Function RVA: %llX\n", searchedRVA);
-
-            foundMod = LoadLibraryA(itr1->second.szExePath);
-            if (foundMod == NULL) {
-                printf("Loading module failed!\n");
-                break;
-            }
-            get_exported_func(foundMod, searchedRVA);
-            break;
-        }
+    std::map<ULONGLONG, MODULEENTRY32> modulesMap;
+    int num = enum_modules_in_process(pid, modulesMap);
+    if (num == 0) {
+        return false;
     }
+
+    printf("Mapped modules: %d\n", num);
+    size_t forwarding_dlls = 0;
+
+    std::map<ULONGLONG, MODULEENTRY32>::iterator itr1;
+    for (itr1 = modulesMap.begin(); itr1 != modulesMap.end(); itr1++) {
+        size_t v_size = 0;
+        BYTE *mappedDLL = load_pe_module(itr1->second.szExePath, v_size);
+        if (!mappedDLL) {
+            printf("[-] Could not map the DLL: %s\n", itr1->second.szExePath);
+            continue;
+        }
+        ULONGLONG remoteBase = (ULONGLONG) itr1->second.modBaseAddr;
+        size_t forwarded_ctr = make_lookup_tables(itr1->second.szExePath, remoteBase, mappedDLL, forwarders_lookup, va_to_names, name_to_va);
+        if (forwarded_ctr) {
+            forwarding_dlls++;
+        }
+        VirtualFree(mappedDLL, v_size, MEM_FREE);
+    }
+    printf("Found forwarding DLLs: %d\n", forwarding_dlls);
+    return true;
+}
+
+void fill_addresses(std::map<std::string, std::set<std::string>> &forwarders_lookup, 
+    std::map<ULONGLONG, std::string> &va_lookup)
+{
+
 }
 
 BYTE* load_file(char *filename, size_t &size)
@@ -100,13 +116,17 @@ int main(int argc, char *argv[])
     if (pid == 0) pid = GetCurrentProcessId();
     printf("PID: %d\n", pid);
 
-    std::map<ULONGLONG, MODULEENTRY32> modulesMap;
-    int num = enum_modules_in_process(pid, modulesMap);
-    if (num == 0) {
-        printf("[ERROR] Cannot fetch modules from the process with PID: %d\n", pid);
+    std::map<std::string, std::set<std::string>> forwarders_lookup;
+    std::map<ULONGLONG, std::set<std::string>> va_to_names;
+    std::map<std::string, ULONGLONG> name_to_va;
+
+    bool isOk = prepare_mapping(pid, forwarders_lookup, va_to_names, name_to_va);
+    if (!isOk) {
+        printf("[-] Mapping failed.\n");
         system("pause");
         return -1;
     }
+
     size_t size = 0;
     BYTE* buffer = load_file(argv[2], size);
     if (buffer == NULL) {
@@ -114,8 +134,9 @@ int main(int argc, char *argv[])
         system("pause");
         return -1;
     }
-    
-    fix_imports(buffer, modulesMap);
+
+
+    fixImports(buffer, forwarders_lookup, va_to_names);
     FILE *fout = fopen(out_filename, "wb");
     fwrite(buffer, 1, size, fout);
     fclose(fout);

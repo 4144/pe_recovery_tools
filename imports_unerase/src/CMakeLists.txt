@@ -5,14 +5,16 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
 
 set (peloader_srcs
 	peloader/pe_hdrs_helper.cpp
-	peloader/load_imports.cpp
-	peloader/sysutil.cpp
+    peloader/pe_raw_to_virtual.cpp
+	peloader/fix_imports.cpp
+    peloader/exports_lookup.cpp
 )
 
 set (peloader_hdrs
 	peloader/pe_hdrs_helper.h
-	peloader/load_imports.h
-	peloader/sysutil.h
+    peloader/pe_raw_to_virtual.h
+	peloader/fix_imports.h
+    peloader/exports_lookup.h
 )
 set (srcs
 	main.cpp

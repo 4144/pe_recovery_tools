@@ -11,4 +11,3 @@ dumped_file - dumped module (in a Virtual format)
 WARNING:
 This is unfinished/early beta version and it has some limitations, i.e.:<br/>
 - works only for PE 32 bit
-- does not support forwarded imports

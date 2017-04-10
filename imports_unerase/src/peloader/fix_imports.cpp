@@ -1,7 +1,7 @@
 #include "fix_imports.h"
 #include <algorithm>
 
-bool fillImportNames32(DWORD call_via, DWORD thunk_addr, LPVOID modulePtr, 
+bool fillImportNames32(DWORD call_via, DWORD thunk_addr, LPVOID modulePtr, size_t moduleSize,
         std::map<ULONGLONG, std::string> &addr_to_func)
 {
     do {
@@ -15,7 +15,7 @@ bool fillImportNames32(DWORD call_via, DWORD thunk_addr, LPVOID modulePtr,
         DWORD *call_via_val = (DWORD*)call_via_ptr;
         if (*call_via_val == 0) {
             //nothing to fill, probably the last record
-            return false;
+            break;
         }
         ULONGLONG searchedAddr = ULONGLONG(*call_via_val);
         std::string found_name = addr_to_func[searchedAddr];
@@ -41,6 +41,10 @@ bool fillImportNames32(DWORD call_via, DWORD thunk_addr, LPVOID modulePtr,
                 continue;
             }
             LPSTR func_name = by_name->Name;
+            if (!validate_ptr(modulePtr, moduleSize, func_name, found_name.length())) {
+                printf("[-] Invalid pointer to the function name!\n");
+                return false;
+            }
             memcpy(func_name, found_name.c_str(), found_name.length()); 
         }
         call_via += sizeof(DWORD);
@@ -161,11 +165,7 @@ size_t mapAddressesToFunctions(std::set<ULONGLONG> &addresses,
     return coveredCount;
 }
 
-//fills handles of mapped pe file
-bool fixImports(PVOID modulePtr, 
-                 std::map<std::string,std::set<std::string>> &forwarders_lookup, 
-                 std::map<ULONGLONG, std::set<std::string>> va_to_names
-                 )
+bool fixImports(PVOID modulePtr, size_t moduleSize, std::map<ULONGLONG, std::set<std::string>> va_to_names)
 {
     bool is64 = is64bit((BYTE*)modulePtr);
 
@@ -196,6 +196,9 @@ bool fixImports(PVOID modulePtr,
         std::set<ULONGLONG> addresses;
         if (!is64) {
             findAddressesToFill32(call_via, thunk_addr, modulePtr, addresses);
+        } else {
+            printf("[-] Support for 64 bit PE is not implemented yet!\n");
+            return false;
         }
         if (lib_name.length() == 0) {
             printf("erased DLL name\n");
@@ -203,8 +206,11 @@ bool fixImports(PVOID modulePtr,
             if (lib_name.length() != 0) {
                 std::string found_name = lib_name + ".dll";
                 char *name_ptr = (char*)((ULONGLONG)modulePtr + lib_desc->Name);
-                //TODO: validate the pointer
-                memcpy(name_ptr,  found_name.c_str(), found_name.length());
+                if (!validate_ptr(modulePtr, moduleSize, name_ptr, found_name.length())) {
+                    printf("[-] Invalid pointer to the function name!\n");
+                    return false;
+                }
+                memcpy(name_ptr, found_name.c_str(), found_name.length());
             }
         }
         
@@ -221,8 +227,9 @@ bool fixImports(PVOID modulePtr,
             printf("All covered!\n");
         }
         if (!is64) {
-            printf("32 bit import\n");
-            fillImportNames32(call_via, thunk_addr, modulePtr, addr_to_func);
+            if (!fillImportNames32(call_via, thunk_addr, modulePtr, moduleSize, addr_to_func)) {
+                return false;
+            }
         }
     }
     printf("---------\n");

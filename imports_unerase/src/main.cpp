@@ -9,7 +9,6 @@
 #include "peloader/pe_raw_to_virtual.h"
 #include "peloader/fix_imports.h"
 
-
 size_t enum_modules_in_process(DWORD process_id, std::map<ULONGLONG, MODULEENTRY32> &modulesMap)
 {
     HANDLE hProcessSnapShot = CreateToolhelp32Snapshot(TH32CS_SNAPALL, process_id);
@@ -33,12 +32,11 @@ size_t enum_modules_in_process(DWORD process_id, std::map<ULONGLONG, MODULEENTRY
     return modules;
 }
 
-bool prepare_mapping(DWORD pid, 
-                    std::map<std::string, std::set<std::string>> &forwarders_lookup, 
-                    std::map<ULONGLONG, std::set<std::string>> &va_to_names,
-                    std::map<std::string, ULONGLONG> &name_to_va
-                    )
+bool prepare_mapping(DWORD pid, std::map<ULONGLONG, std::set<std::string>> &va_to_names)
 {
+    std::map<std::string, std::set<std::string>> forwarders_lookup;
+    std::map<std::string, ULONGLONG> name_to_va;
+
     std::map<ULONGLONG, MODULEENTRY32> modulesMap;
     int num = enum_modules_in_process(pid, modulesMap);
     if (num == 0) {
@@ -67,12 +65,6 @@ bool prepare_mapping(DWORD pid,
     return true;
 }
 
-void fill_addresses(std::map<std::string, std::set<std::string>> &forwarders_lookup, 
-    std::map<ULONGLONG, std::string> &va_lookup)
-{
-
-}
-
 BYTE* load_file(char *filename, size_t &size)
 {
     if (filename == NULL) return NULL;
@@ -98,29 +90,31 @@ BYTE* load_file(char *filename, size_t &size)
 
 int main(int argc, char *argv[])
 {
+    char *default_out_file = "out.bin";
+    char *version = "0.1";
     ULONGLONG loadBase = 0;
     if (argc < 3) {
-        printf("A tool to recover erased imports\n");
-        printf("Required args: <PID> <dumped_file>\n---\n");
-        printf("PID: (decimal) PID of the target application\n");
-        printf("dumped_file: a module dumped from the app with the given PID (in Virtual format)\n");
+        printf("[Imports_Unerase v%s]\n", version);
+        printf("A tool to recover erased imports\n---\n");
+        printf("Args: <PID> <dumped_file> [out_file*]\n");
+        printf("PID:\n\t(decimal) PID of the target application\n");
+        printf("dumped_file:\n\ta module dumped from the app with the given PID (virtual format)\n");
+        printf("out_file:\n\tname of the output file (default: %s)\n", default_out_file);
+        printf("* - optional\n");
         printf("---\n");
         system("pause");
         return -1;
     }
-    
-    char *out_filename = "out.bin";
+
+    char *out_filename = (argc > 3) ? argv[3] : default_out_file;
 
     DWORD pid = atoi(argv[1]);
     
     if (pid == 0) pid = GetCurrentProcessId();
     printf("PID: %d\n", pid);
 
-    std::map<std::string, std::set<std::string>> forwarders_lookup;
     std::map<ULONGLONG, std::set<std::string>> va_to_names;
-    std::map<std::string, ULONGLONG> name_to_va;
-
-    bool isOk = prepare_mapping(pid, forwarders_lookup, va_to_names, name_to_va);
+    bool isOk = prepare_mapping(pid, va_to_names);
     if (!isOk) {
         printf("[-] Mapping failed.\n");
         system("pause");
@@ -135,8 +129,12 @@ int main(int argc, char *argv[])
         return -1;
     }
 
+    if (fixImports(buffer, size, va_to_names) == false) {
+        printf("[ERROR] Cannot reconstruct imports!\n");
+        system("pause");
+        return -1;
 
-    fixImports(buffer, forwarders_lookup, va_to_names);
+    }
     FILE *fout = fopen(out_filename, "wb");
     fwrite(buffer, 1, size, fout);
     fclose(fout);

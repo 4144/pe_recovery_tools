@@ -5,7 +5,7 @@ Small tool for recovering erased imports of a dumped PE file<br/>
 Usage:<br>
 <pre>
 imports_unerase.exe [PID] [dumped_file] [output_file*]<br/>
-PID - (decimal) PID of the application from where the module was dumped<br/>
+PID - (decimal) PID of the application from where the module was dumped
 dumped_file - dumped module (in a Virtual format)
 output_file* - name of the output file (defaule: out.bin)
 * - optional

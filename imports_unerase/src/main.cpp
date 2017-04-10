@@ -11,7 +11,7 @@
 
 size_t enum_modules_in_process(DWORD process_id, std::map<ULONGLONG, MODULEENTRY32> &modulesMap)
 {
-    HANDLE hProcessSnapShot = CreateToolhelp32Snapshot(TH32CS_SNAPALL, process_id);
+    HANDLE hProcessSnapShot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, process_id);
     MODULEENTRY32 module_entry = { 0 };
     module_entry.dwSize = sizeof(module_entry);
 	

@@ -156,8 +156,8 @@ size_t mapAddressesToFunctions(std::set<ULONGLONG> &addresses,
                     } else {
                         // it does not have any function filled, so just put the current one:
                         addr_to_func[searchedAddr] = funcName;
+                        coveredCount++;
                     }
-                    coveredCount++;
                 }
             }
         }

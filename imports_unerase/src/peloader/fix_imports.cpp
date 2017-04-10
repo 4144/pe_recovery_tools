@@ -1,77 +1,8 @@
 #include "fix_imports.h"
 #include <algorithm>
 
-HMODULE findInModulesMap(std::map<ULONGLONG, MODULEENTRY32> &modulesMap, ULONGLONG &dllBase, ULONGLONG searchedAddr)
-{
-    std::map<ULONGLONG, MODULEENTRY32>::iterator lastEl = modulesMap.lower_bound(searchedAddr);
-    std::map<ULONGLONG, MODULEENTRY32>::iterator itr1;
-    HMODULE foundMod = NULL;
-    for (itr1 = modulesMap.begin(); itr1 != lastEl; itr1++) {
-        ULONGLONG begin = itr1->first;
-        ULONGLONG end = itr1->second.modBaseSize + begin;
-        
-        if (searchedAddr >= begin && searchedAddr < end) {
-            ULONGLONG searchedRVA = searchedAddr - begin;
-            dllBase = begin;
-            printf("Found address in the module: %s\n", itr1->second.szExePath);
-            printf("Function RVA: %llX\n", searchedRVA);
-            return LoadLibraryA(itr1->second.szExePath);
-        }
-    }
-    dllBase = NULL;
-    return NULL;
-}
-
-bool getModuleShortName(char* fullName, char* outBuf)
-{
-    if (fullName == NULL) return false;
-
-    int fullLen = strlen(fullName);
-    int i = fullLen - 1;
-    for (; i >= 0; i--) {
-        if (fullName[i] == '\\' || fullName[i] == '/') {
-            i++;
-            break;
-        }
-    }
-    if (i >= fullLen - 1) return false;
-    memcpy(outBuf, &fullName[i], fullLen - i);
-    return true;
-}
-
-char* get_exported_func(PVOID modulePtr, ULONGLONG searchedRVA)
-{
-    IMAGE_DATA_DIRECTORY *exportsDir = get_pe_directory((const BYTE*) modulePtr, IMAGE_DIRECTORY_ENTRY_EXPORT);
-    if (exportsDir == NULL) return NULL;
-
-    DWORD expAddr = exportsDir->VirtualAddress;
-    if (expAddr == 0) return NULL;
-
-    IMAGE_EXPORT_DIRECTORY* exp = (IMAGE_EXPORT_DIRECTORY*)(expAddr + (ULONG_PTR) modulePtr);
-    SIZE_T namesCount = exp->NumberOfNames;
-
-    DWORD funcsListRVA = exp->AddressOfFunctions;
-    DWORD funcNamesListRVA = exp->AddressOfNames;
-    DWORD namesOrdsListRVA = exp->AddressOfNameOrdinals;
-
-    //go through names:
-    for (SIZE_T i = 0; i < namesCount; i++) {
-        DWORD* nameRVA = (DWORD*)(funcNamesListRVA + (BYTE*) modulePtr + i * sizeof(DWORD));
-        WORD* nameIndex = (WORD*)(namesOrdsListRVA + (BYTE*) modulePtr + i * sizeof(WORD));
-        DWORD* funcRVA = (DWORD*)(funcsListRVA + (BYTE*) modulePtr + (*nameIndex) * sizeof(DWORD));
-
-        LPSTR name = (LPSTR)(*nameRVA + (BYTE*) modulePtr);
-        if (searchedRVA == (*funcRVA)) {
-            printf("Name: %s\n", name);
-            return name;
-        }
-    }
-    //function not found
-    return NULL;
-}
-
 bool fillImportNames32(DWORD call_via, DWORD thunk_addr, LPVOID modulePtr, 
-                              std::map<ULONGLONG, std::string> &addr_to_func)
+        std::map<ULONGLONG, std::string> &addr_to_func)
 {
     do {
         LPVOID call_via_ptr = (LPVOID)((ULONGLONG)modulePtr + call_via);

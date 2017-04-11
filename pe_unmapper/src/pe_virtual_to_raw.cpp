@@ -52,16 +52,16 @@ bool sections_virtual_to_raw(BYTE* payload, SIZE_T payload_size, OUT BYTE* destA
         SIZE_T sec_size = next_sec->SizeOfRawData;
         raw_end = next_sec->SizeOfRawData + next_sec->PointerToRawData;
 
-        if (next_sec->VirtualAddress + sec_size >= payload_size) {
+        if (next_sec->VirtualAddress + sec_size > payload_size) {
             printf("[!] Virtual section size is out ouf bounds: %lx\n", sec_size);
             sec_size = SIZE_T(payload_size - next_sec->VirtualAddress);
             printf("[!] Truncated to maximal size: %lx\n", sec_size);
         }
-        if (next_sec->VirtualAddress >= payload_size && sec_size != 0) {
+        if (next_sec->VirtualAddress > payload_size && sec_size != 0) {
             printf("[-] VirtualAddress of section is out ouf bounds: %lx\n", static_cast<SIZE_T>(next_sec->VirtualAddress));
             return false;
         }
-        if (next_sec->PointerToRawData + sec_size >= payload_size) {
+        if (next_sec->PointerToRawData + sec_size > payload_size) {
             printf("[-] Raw section size is out ouf bounds: %lx\n", sec_size);
             return false;
         }

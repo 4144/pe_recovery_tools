@@ -24,7 +24,7 @@ bool remap_pe_file(IN const char* filename, IN const char* out_filename, ULONGLO
 
     fseek(f, 0, SEEK_END);
     size_t size = ftell(f);
-    printf("size = %d\n", size);
+    printf("size = %#llx = %lld\n", static_cast<ULONGLONG>(size), static_cast<ULONGLONG>(size));
     BYTE* in_buf = (BYTE*) VirtualAlloc(NULL, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     BYTE* out_buf = (BYTE*) VirtualAlloc(NULL, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 
@@ -85,11 +85,13 @@ bool remap_pe_file(IN const char* filename, IN const char* out_filename, ULONGLO
 
 int main(int argc, char *argv[])
 {
+    char* version = "0.1";
     char*  filename = NULL;
     char* out_filename = "out.exe";
     ULONGLONG loadBase = 0;
     if (argc < 3) {
-        printf("Required args: <input file> <load base: in hex> [*output file]\n");
+        printf("[ pe_unmapper v%s ]\n\n", version);
+        printf("Args: <input file> <load base: in hex> [*output file]\n");
         printf("* - optional\n");
         system("pause");
         return -1;

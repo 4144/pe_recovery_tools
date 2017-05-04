@@ -42,10 +42,11 @@ bool fillImportNames32(DWORD call_via, DWORD thunk_addr, LPVOID modulePtr, size_
             }
             LPSTR func_name = by_name->Name;
             if (!validate_ptr(modulePtr, moduleSize, func_name, found_name.length())) {
-                printf("[-] Invalid pointer to the function name!\n");
-                return false;
+                printf("[-] Cannot save! Invalid pointer to the function name!\n");
+                //TODO: create a new section to store the names
+            } else {
+                memcpy(func_name, found_name.c_str(), found_name.length()); 
             }
-            memcpy(func_name, found_name.c_str(), found_name.length()); 
         }
         call_via += sizeof(DWORD);
         thunk_addr += sizeof(DWORD);
@@ -207,11 +208,13 @@ bool fixImports(PVOID modulePtr, size_t moduleSize, std::map<ULONGLONG, std::set
                 std::string found_name = lib_name + ".dll";
                 char *name_ptr = (char*)((ULONGLONG)modulePtr + lib_desc->Name);
                 if (!validate_ptr(modulePtr, moduleSize, name_ptr, found_name.length())) {
-                    printf("[-] Invalid pointer to the function name!\n");
+                    printf("[-] Invalid pointer to the name!\n");
                     return false;
                 }
                 memcpy(name_ptr, found_name.c_str(), found_name.length());
             }
+        } else {
+            lib_name = getDllName(lib_name);
         }
         
         if (lib_name.length() == 0) {

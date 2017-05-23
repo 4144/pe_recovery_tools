@@ -16,4 +16,4 @@ output_file* - name of the output file (defaule: out.bin)
 This is unfinished/early beta version and it has some limitations, i.e.:<br/>
 - works only for PE 32 bit
 
-Compiled version: https://drive.google.com/file/d/0Bzb5kQFOXkiScUhoWDFHbi05TkE/view?usp=sharing
+Compiled version: https://drive.google.com/open?id=0Bzb5kQFOXkiScUhoWDFHbi05TkE

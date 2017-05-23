@@ -1,6 +1,8 @@
 #include "fix_imports.h"
 #include <algorithm>
 
+#define MIN_DLL_LEN 5
+
 bool fillImportNames32(DWORD call_via, DWORD thunk_addr, LPVOID modulePtr, size_t moduleSize,
         std::map<ULONGLONG, std::string> &addr_to_func)
 {
@@ -195,7 +197,7 @@ bool fixImports(PVOID modulePtr, size_t moduleSize, std::map<ULONGLONG, std::set
         printf("Imported Lib: %x : %x : %x\n", lib_desc->FirstThunk, lib_desc->OriginalFirstThunk, lib_desc->Name);
 
         LPSTR name_ptr = (LPSTR)((ULONGLONG) modulePtr + lib_desc->Name);
-        if (!validate_ptr(modulePtr, moduleSize, name_ptr, sizeof(LPSTR))) {
+        if (!validate_ptr(modulePtr, moduleSize, name_ptr, sizeof(char) * MIN_DLL_LEN)) {
             printf("[-] Invalid pointer to the name!\n");
             return false;
         }

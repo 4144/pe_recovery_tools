@@ -181,17 +181,25 @@ bool fixImports(PVOID modulePtr, size_t moduleSize, std::map<ULONGLONG, std::set
 
     printf("---IMP---\n");
     while (parsedSize < maxSize) {
-        lib_desc = (IMAGE_IMPORT_DESCRIPTOR*)(impAddr + parsedSize + (ULONG_PTR) modulePtr);
-        parsedSize += sizeof(IMAGE_IMPORT_DESCRIPTOR);
 
+        lib_desc = (IMAGE_IMPORT_DESCRIPTOR*)(impAddr + parsedSize + (ULONG_PTR) modulePtr);
+        if (!validate_ptr(modulePtr, moduleSize, lib_desc, sizeof(IMAGE_IMPORT_DESCRIPTOR))) {
+            printf("[-] Invalid descriptor pointer!\n");
+            return false;
+        }
+        parsedSize += sizeof(IMAGE_IMPORT_DESCRIPTOR);
         if (lib_desc->OriginalFirstThunk == NULL && lib_desc->FirstThunk == NULL) {
             break;
         }
 
         printf("Imported Lib: %x : %x : %x\n", lib_desc->FirstThunk, lib_desc->OriginalFirstThunk, lib_desc->Name);
 
+        LPSTR name_ptr = (LPSTR)((ULONGLONG) modulePtr + lib_desc->Name);
+        if (!validate_ptr(modulePtr, moduleSize, name_ptr, sizeof(LPSTR))) {
+            printf("[-] Invalid pointer to the name!\n");
+            return false;
+        }
         std::string lib_name = (LPSTR)((ULONGLONG) modulePtr + lib_desc->Name);
-
         DWORD call_via = lib_desc->FirstThunk;
         DWORD thunk_addr = lib_desc->OriginalFirstThunk; // warning: it can be NULL!
         std::set<ULONGLONG> addresses;
@@ -206,7 +214,7 @@ bool fixImports(PVOID modulePtr, size_t moduleSize, std::map<ULONGLONG, std::set
             lib_name = findDllName(addresses, va_to_names);
             if (lib_name.length() != 0) {
                 std::string found_name = lib_name + ".dll";
-                char *name_ptr = (char*)((ULONGLONG)modulePtr + lib_desc->Name);
+                name_ptr = (LPSTR)((ULONGLONG) modulePtr + lib_desc->Name);
                 if (!validate_ptr(modulePtr, moduleSize, name_ptr, found_name.length())) {
                     printf("[-] Invalid pointer to the name!\n");
                     return false;

@@ -91,7 +91,7 @@ BYTE* load_file(char *filename, size_t &size)
 int main(int argc, char *argv[])
 {
     char *default_out_file = "out.bin";
-    char *version = "0.1.4";
+    char *version = "0.1.5";
     ULONGLONG loadBase = 0;
     if (argc < 3) {
         printf("[Imports_Unerase v%s]\n", version);

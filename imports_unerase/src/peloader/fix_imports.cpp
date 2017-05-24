@@ -3,9 +3,29 @@
 
 #define MIN_DLL_LEN 5
 
+inline size_t offset(const char* buf, size_t len, const char* str)
+{
+	return std::search(buf, buf + len, str, str + strlen(str)) - buf;
+}
+
+LPVOID search_name(std::string name, const char* modulePtr, size_t moduleSize)
+{
+    size_t o = offset(modulePtr, moduleSize, name.c_str());
+    if (o < moduleSize) {
+       return (LPVOID)(modulePtr + o);
+    }
+    return NULL;
+}
+
 bool fillImportNames32(DWORD call_via, DWORD thunk_addr, LPVOID modulePtr, size_t moduleSize,
         std::map<ULONGLONG, std::string> &addr_to_func)
 {
+    bool is_single_thunk = false;
+    if (thunk_addr == 0) {
+        thunk_addr = call_via;
+        is_single_thunk = true;
+    }
+
     do {
         LPVOID call_via_ptr = (LPVOID)((ULONGLONG)modulePtr + call_via);
         if (call_via_ptr == NULL) break;
@@ -19,11 +39,11 @@ bool fillImportNames32(DWORD call_via, DWORD thunk_addr, LPVOID modulePtr, size_
             //nothing to fill, probably the last record
             break;
         }
+
         ULONGLONG searchedAddr = ULONGLONG(*call_via_val);
         std::string found_name = addr_to_func[searchedAddr];
         if (found_name.length() == 0) {
             printf("[-] Function not found: %X\n", searchedAddr);
-            //TODO: check forwarded
             call_via += sizeof(DWORD);
             thunk_addr += sizeof(DWORD);
             continue;
@@ -31,7 +51,7 @@ bool fillImportNames32(DWORD call_via, DWORD thunk_addr, LPVOID modulePtr, size_
         printf("[+] %s\n", found_name.c_str());
 
         //can I save the name in the original thunk?
-        if (*thunk_val != *call_via_val) {
+        if (is_single_thunk || *thunk_val != *call_via_val) {
             IMAGE_THUNK_DATA32* desc = (IMAGE_THUNK_DATA32*) thunk_ptr;
             if (desc->u1.Function == NULL) break;
 
@@ -43,11 +63,24 @@ bool fillImportNames32(DWORD call_via, DWORD thunk_addr, LPVOID modulePtr, size_
                 continue;
             }
             LPSTR func_name = by_name->Name;
-            if (!validate_ptr(modulePtr, moduleSize, func_name, found_name.length())) {
-                printf("[-] Cannot save! Invalid pointer to the function name!\n");
-                //TODO: create a new section to store the names
+            if (validate_ptr(modulePtr, moduleSize, func_name, found_name.length()) == true) {
+                memcpy(func_name, found_name.c_str(), found_name.length());
+                printf("[+] Saved\n");
             } else {
-                memcpy(func_name, found_name.c_str(), found_name.length()); 
+                // try to find the offset to the name in the module:
+                BYTE* found_ptr = (BYTE*) search_name(found_name, (const char*) modulePtr, moduleSize);
+                if (found_ptr) {
+                    DWORD offset = static_cast<DWORD>((ULONGLONG)found_ptr - (ULONGLONG)modulePtr);
+                    printf("[*] Found the name at: %llx\n", offset);
+                    offset -= sizeof(WORD);
+                    //TODO: validate more...
+
+                    memcpy(call_via_ptr, &offset, sizeof(DWORD)); 
+                    //printf("[*] Saved offset as thunk val: %llx\n", static_cast<ULONGLONG>(offset));
+                } else {
+                    printf("[-] Cannot save! Invalid pointer to the function name!\n");
+                    //TODO: create a new section to store the names
+                }
             }
         }
         call_via += sizeof(DWORD);

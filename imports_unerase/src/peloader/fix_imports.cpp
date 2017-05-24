@@ -71,7 +71,7 @@ bool fillImportNames32(DWORD call_via, DWORD thunk_addr, LPVOID modulePtr, size_
                 BYTE* found_ptr = (BYTE*) search_name(found_name, (const char*) modulePtr, moduleSize);
                 if (found_ptr) {
                     DWORD offset = static_cast<DWORD>((ULONGLONG)found_ptr - (ULONGLONG)modulePtr);
-                    printf("[*] Found the name at: %llx\n", offset);
+                    printf("[*] Found the name at: %llx\n", static_cast<ULONGLONG>(offset));
                     offset -= sizeof(WORD);
                     //TODO: validate more...
 

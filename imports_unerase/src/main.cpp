@@ -136,10 +136,12 @@ int main(int argc, char *argv[])
 
     }
     FILE *fout = fopen(out_filename, "wb");
-    fwrite(buffer, 1, size, fout);
-    fclose(fout);
+    if (fout) {
+        fwrite(buffer, 1, size, fout);
+        fclose(fout);
+        printf("[+] Saved output to: %s\n", out_filename);
+    }
     VirtualFree(buffer, size, MEM_FREE);
-    printf("[+] Saved output to: %s\n", out_filename);
     system("pause");
     return 0;
 }

@@ -3,16 +3,16 @@
 
 #define MIN_DLL_LEN 5
 
-inline size_t offset(const char* buf, size_t len, const char* str)
-{
-    return std::search(buf, buf + len, str, str + strlen(str)) - buf;
-}
-
 LPVOID search_name(std::string name, const char* modulePtr, size_t moduleSize)
 {
-    size_t o = offset(modulePtr, moduleSize, name.c_str());
+    const char* namec = name.c_str();
+    const char* found_ptr = std::search(modulePtr, modulePtr + moduleSize, namec, namec + name.length());
+    if (found_ptr == NULL) {
+        return NULL;
+    }
+    size_t o = found_ptr - modulePtr;
     if (o < moduleSize) {
-       return (LPVOID)(modulePtr + o);
+       return (LPVOID)(found_ptr);
     }
     return NULL;
 }
@@ -75,7 +75,8 @@ bool fillImportNames32(IMAGE_IMPORT_DESCRIPTOR* lib_desc, LPVOID modulePtr, size
                 printf("[+] Saved\n");
             } else {
                 // try to find the offset to the name in the module:
-                BYTE* found_ptr = (BYTE*) search_name(found_name, (const char*) modulePtr, moduleSize);
+                const char* names_start = ((char*) modulePtr + lib_desc->Name);
+                BYTE* found_ptr = (BYTE*) search_name(found_name, names_start, moduleSize - (names_start - modulePtr));
                 if (found_ptr) {
                     DWORD offset = static_cast<DWORD>((ULONGLONG)found_ptr - (ULONGLONG)modulePtr);
                     printf("[*] Found the name at: %llx\n", static_cast<ULONGLONG>(offset));
@@ -83,7 +84,7 @@ bool fillImportNames32(IMAGE_IMPORT_DESCRIPTOR* lib_desc, LPVOID modulePtr, size
                     //TODO: validate more...
 
                     memcpy(call_via_ptr, &offset, sizeof(DWORD)); 
-                    //printf("[*] Saved offset as thunk val: %llx\n", static_cast<ULONGLONG>(offset));
+
                 } else {
                     printf("[-] Cannot save! Invalid pointer to the function name!\n");
                     //TODO: create a new section to store the names

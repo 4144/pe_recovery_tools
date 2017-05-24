@@ -7,6 +7,7 @@ size_t forwarderNameLen(BYTE* fPtr)
     size_t len = 0;
     while ((*fPtr >= 'a' && *fPtr <= 'z')
             || (*fPtr >= 'A' && *fPtr <= 'Z')
+            || (*fPtr >= '0' && *fPtr <= '9')
             || (*fPtr == '.')
             || (*fPtr == '_') 
             || (*fPtr == '-'))

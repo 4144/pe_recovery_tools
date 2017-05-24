@@ -5,7 +5,7 @@
 
 inline size_t offset(const char* buf, size_t len, const char* str)
 {
-	return std::search(buf, buf + len, str, str + strlen(str)) - buf;
+    return std::search(buf, buf + len, str, str + strlen(str)) - buf;
 }
 
 LPVOID search_name(std::string name, const char* modulePtr, size_t moduleSize)
@@ -17,10 +17,17 @@ LPVOID search_name(std::string name, const char* modulePtr, size_t moduleSize)
     return NULL;
 }
 
-bool fillImportNames32(DWORD call_via, DWORD thunk_addr, LPVOID modulePtr, size_t moduleSize,
+bool fillImportNames32(IMAGE_IMPORT_DESCRIPTOR* lib_desc, LPVOID modulePtr, size_t moduleSize,
         std::map<ULONGLONG, std::string> &addr_to_func)
 {
+    if (lib_desc == NULL) return false;
+
+    DWORD call_via = lib_desc->FirstThunk;
+    DWORD thunk_addr = lib_desc->OriginalFirstThunk; // warning: it can be NULL!
     bool is_single_thunk = false;
+    
+    if (call_via == 0) return false;
+
     if (thunk_addr == 0) {
         thunk_addr = call_via;
         is_single_thunk = true;
@@ -273,7 +280,7 @@ bool fixImports(PVOID modulePtr, size_t moduleSize, std::map<ULONGLONG, std::set
             printf("All covered!\n");
         }
         if (!is64) {
-            if (!fillImportNames32(call_via, thunk_addr, modulePtr, moduleSize, addr_to_func)) {
+            if (!fillImportNames32(lib_desc, modulePtr, moduleSize, addr_to_func)) {
                 return false;
             }
         }

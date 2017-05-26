@@ -67,7 +67,7 @@ int main(int argc, char *argv[])
 {
     ULONGLONG loadBase = 0;
     if (argc < 3) {
-        printf("VA_to_Import - a tool finding the name of the import by it's virtual address\n");
+        printf("find_forwarders - a tool finding the name of the import (and the forwarders) by it's virtual address\n");
         printf("Args: <PID> <searched_addr>\n");
         printf("PID:\n    (decimal) PID of the target application\n");
         printf("searched_addr:\n    (hexadecimal) VA of the imported function which name we want to retrieve\n");

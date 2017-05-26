@@ -75,8 +75,8 @@ bool fillImportNames32(IMAGE_IMPORT_DESCRIPTOR* lib_desc, LPVOID modulePtr, size
                 printf("[+] Saved\n");
             } else {
                 // try to find the offset to the name in the module:
-                const char* names_start = ((char*) modulePtr + lib_desc->Name);
-                BYTE* found_ptr = (BYTE*) search_name(found_name, names_start, moduleSize - (names_start - modulePtr));
+                const char* names_start = ((const char*) modulePtr + lib_desc->Name);
+                BYTE* found_ptr = (BYTE*) search_name(found_name, names_start, moduleSize - (names_start - (const char*)modulePtr));
                 if (found_ptr) {
                     DWORD offset = static_cast<DWORD>((ULONGLONG)found_ptr - (ULONGLONG)modulePtr);
                     printf("[*] Found the name at: %llx\n", static_cast<ULONGLONG>(offset));

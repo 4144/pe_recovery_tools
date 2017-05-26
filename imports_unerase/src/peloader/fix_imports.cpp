@@ -55,7 +55,7 @@ bool fillImportNames32(IMAGE_IMPORT_DESCRIPTOR* lib_desc, LPVOID modulePtr, size
             thunk_addr += sizeof(DWORD);
             continue;
         }
-        printf("[+] %s\n", found_name.c_str());
+        printf("[*] %s\n", found_name.c_str());
 
         //can I save the name in the original thunk?
         if (is_single_thunk || *thunk_val != *call_via_val) {
@@ -253,7 +253,7 @@ bool fixImports(PVOID modulePtr, size_t moduleSize, std::map<ULONGLONG, std::set
             return false;
         }
         if (lib_name.length() == 0) {
-            printf("erased DLL name\n");
+            printf("Erased DLL name\n");
             lib_name = findDllName(addresses, va_to_names);
             if (lib_name.length() != 0) {
                 std::string found_name = lib_name + ".dll";

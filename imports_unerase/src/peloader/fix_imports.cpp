@@ -90,29 +90,36 @@ bool fillImportNames32(IMAGE_IMPORT_DESCRIPTOR* lib_desc, LPVOID modulePtr, size
                 continue;
             }
             LPSTR func_name_ptr = by_name->Name;
+            // try to save the found name under the pointer:
             if (validate_ptr(modulePtr, moduleSize, func_name_ptr, found_name.length()) == true) {
                 memcpy(func_name_ptr, found_name.c_str(), found_name.length());
                 printf("[+] Saved\n");
                 is_name_saved = true;
             } else {
                 // try to find the offset to the name in the module:
-                while (funcname_itr != addr_to_func[searchedAddr].end()) {
+                for (funcname_itr = addr_to_func[searchedAddr].begin(); 
+                    funcname_itr != addr_to_func[searchedAddr].end(); 
+                    funcname_itr++) 
+                {
                     found_name = *funcname_itr;
-                    funcname_itr++;
-                    
+
                     const char* names_start = ((const char*) modulePtr + lib_desc->Name);
                     BYTE* found_ptr = (BYTE*) search_name(found_name, names_start, moduleSize - (names_start - (const char*)modulePtr));
-                    if (found_ptr) {
-                        DWORD offset = static_cast<DWORD>((ULONGLONG)found_ptr - (ULONGLONG)modulePtr);
-                        printf("[*] %s\n", found_name.c_str());
-                        printf("[*] Found the name at: %llx\n", static_cast<ULONGLONG>(offset));
-                        offset -= sizeof(WORD);
-                        //TODO: validate more...
+                    if (!found_ptr) continue;
 
-                        memcpy(call_via_ptr, &offset, sizeof(DWORD)); 
-                        is_name_saved = true;
+                    DWORD offset = static_cast<DWORD>((ULONGLONG)found_ptr - (ULONGLONG)modulePtr);
+
+                    //if it is not the first name from the list, inform about it:
+                    if (funcname_itr != addr_to_func[searchedAddr].begin()) {
+                        printf("[*] %s\n", found_name.c_str());
                     }
+                    printf("[+] Found the name at: %llx\n", static_cast<ULONGLONG>(offset));
+                    offset -= sizeof(WORD);
+                    //TODO: validate more...
+                    memcpy(call_via_ptr, &offset, sizeof(DWORD)); 
+                    is_name_saved = true;
                 }
+
                 if (!is_name_saved) {
                     printf("[-] Cannot save! Invalid pointer to the function name!\n");
                     //TODO: create a new section to store the names

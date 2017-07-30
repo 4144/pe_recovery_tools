@@ -38,14 +38,11 @@ bool fillImportNames32(IMAGE_IMPORT_DESCRIPTOR* lib_desc, LPVOID modulePtr, size
     if (lib_desc == NULL) return false;
 
     DWORD call_via = lib_desc->FirstThunk;
-    DWORD thunk_addr = lib_desc->OriginalFirstThunk; // warning: it can be NULL!
-    bool is_single_thunk = false;
-    
-    if (call_via == 0) return false;
+    if (call_via == NULL) return false;
 
-    if (thunk_addr == 0) {
+    DWORD thunk_addr = lib_desc->OriginalFirstThunk;
+    if (thunk_addr == NULL) {
         thunk_addr = call_via;
-        is_single_thunk = true;
     }
 
     do {
@@ -77,58 +74,63 @@ bool fillImportNames32(IMAGE_IMPORT_DESCRIPTOR* lib_desc, LPVOID modulePtr, size
 
         bool is_name_saved = false;
 
-        //can I save the name in the original thunk?
-        if (is_single_thunk || *thunk_val != *call_via_val) {
-            IMAGE_THUNK_DATA32* desc = (IMAGE_THUNK_DATA32*) thunk_ptr;
-            if (desc->u1.Function == NULL) break;
+        IMAGE_THUNK_DATA32* desc = (IMAGE_THUNK_DATA32*) thunk_ptr;
+        if (desc->u1.Function == NULL) {
+            break;
+        }
 
-            PIMAGE_IMPORT_BY_NAME by_name = (PIMAGE_IMPORT_BY_NAME) ((ULONGLONG) modulePtr + desc->u1.AddressOfData);
-            if (desc->u1.Ordinal & IMAGE_ORDINAL_FLAG32) {
-                printf("Imports by ordinals are not supported!\n");
-                call_via += sizeof(DWORD);
-                thunk_addr += sizeof(DWORD);
-                continue;
-            }
-            LPSTR func_name_ptr = by_name->Name;
-            // try to save the found name under the pointer:
-            if (validate_ptr(modulePtr, moduleSize, func_name_ptr, found_name.length()) == true) {
-                memcpy(func_name_ptr, found_name.c_str(), found_name.length());
-                printf("[+] Saved\n");
+        PIMAGE_IMPORT_BY_NAME by_name = (PIMAGE_IMPORT_BY_NAME) ((ULONGLONG) modulePtr + desc->u1.AddressOfData);
+        if (desc->u1.Ordinal & IMAGE_ORDINAL_FLAG32) {
+            printf("Imports by ordinals are not supported!\n");
+            call_via += sizeof(DWORD);
+            thunk_addr += sizeof(DWORD);
+            continue;
+        }
+
+        LPSTR func_name_ptr = by_name->Name;
+        // try to save the found name under the pointer:
+        if (validate_ptr(modulePtr, moduleSize, func_name_ptr, found_name.length()) == true) {
+            memcpy(func_name_ptr, found_name.c_str(), found_name.length());
+            printf("[+] Saved\n");
+            is_name_saved = true;
+        } else {
+            // try to find the offset to the name in the module:
+            for (funcname_itr = addr_to_func[searchedAddr].begin(); 
+                funcname_itr != addr_to_func[searchedAddr].end(); 
+                funcname_itr++) 
+            {
+                found_name = *funcname_itr;
+
+                const char* names_start = ((const char*) modulePtr + lib_desc->Name);
+                BYTE* found_ptr = (BYTE*) search_name(found_name, names_start, moduleSize - (names_start - (const char*)modulePtr));
+                if (!found_ptr) {
+                    //name not found in the binary
+                    //TODO: maybe it is imported by ordinal?
+                    continue;
+                }
+                DWORD offset = static_cast<DWORD>((ULONGLONG)found_ptr - (ULONGLONG)modulePtr);
+
+                //if it is not the first name from the list, inform about it:
+                if (funcname_itr != addr_to_func[searchedAddr].begin()) {
+                    printf("[*] %s\n", found_name.c_str());
+                }
+                printf("[+] Found the name at: %llx\n", static_cast<ULONGLONG>(offset));
+                offset -= sizeof(WORD);
+                //TODO: validate more...
+                memcpy(call_via_ptr, &offset, sizeof(DWORD)); 
                 is_name_saved = true;
-            } else {
-                // try to find the offset to the name in the module:
-                for (funcname_itr = addr_to_func[searchedAddr].begin(); 
-                    funcname_itr != addr_to_func[searchedAddr].end(); 
-                    funcname_itr++) 
-                {
-                    found_name = *funcname_itr;
+            }
 
-                    const char* names_start = ((const char*) modulePtr + lib_desc->Name);
-                    BYTE* found_ptr = (BYTE*) search_name(found_name, names_start, moduleSize - (names_start - (const char*)modulePtr));
-                    if (!found_ptr) continue;
-
-                    DWORD offset = static_cast<DWORD>((ULONGLONG)found_ptr - (ULONGLONG)modulePtr);
-
-                    //if it is not the first name from the list, inform about it:
-                    if (funcname_itr != addr_to_func[searchedAddr].begin()) {
-                        printf("[*] %s\n", found_name.c_str());
-                    }
-                    printf("[+] Found the name at: %llx\n", static_cast<ULONGLONG>(offset));
-                    offset -= sizeof(WORD);
-                    //TODO: validate more...
-                    memcpy(call_via_ptr, &offset, sizeof(DWORD)); 
-                    is_name_saved = true;
-                }
-
-                if (!is_name_saved) {
-                    printf("[-] Cannot save! Invalid pointer to the function name!\n");
-                    //TODO: create a new section to store the names
-                }
+            if (!is_name_saved) {
+                printf("[-] Cannot save! Invalid pointer to the function name!\n");
+                //TODO: create a new section to store the names
             }
         }
+
         call_via += sizeof(DWORD);
         thunk_addr += sizeof(DWORD);
     } while (true);
+
     return true;
 }
 
@@ -308,8 +310,11 @@ bool fixImports(PVOID modulePtr, size_t moduleSize, std::map<ULONGLONG, std::set
         }
         if (!is64) {
             if (!fillImportNames32(lib_desc, modulePtr, moduleSize, addr_to_func)) {
+                printf("[-] Could not fill some import names!\n");
                 return false;
             }
+        } else {
+            printf("[-] PE 64-bit is not supported!\n");
         }
     }
     printf("---------\n");

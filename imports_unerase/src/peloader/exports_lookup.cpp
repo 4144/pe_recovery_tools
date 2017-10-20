@@ -21,12 +21,6 @@ size_t forwarderNameLen(BYTE* fPtr)
     return 0;
 }
 
-char easytolower(char in){
-    if(in<='Z' && in>='A')
-    return in-('Z'-'z');
-    return in;
-}
-
 std::string getDllName(const std::string& str)
 {
     std::size_t len = str.length();

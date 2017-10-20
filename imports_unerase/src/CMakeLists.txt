@@ -7,15 +7,18 @@ set (peloader_srcs
 	peloader/pe_hdrs_helper.cpp
     peloader/pe_raw_to_virtual.cpp
 	peloader/fix_imports.cpp
-    peloader/exports_lookup.cpp
+	peloader/exports_lookup.cpp
+	peloader/exported_func.cpp
 )
 
 set (peloader_hdrs
 	peloader/pe_hdrs_helper.h
     peloader/pe_raw_to_virtual.h
 	peloader/fix_imports.h
-    peloader/exports_lookup.h
+	peloader/exports_lookup.h
+	peloader/exported_func.h
 )
+
 set (srcs
 	main.cpp
     ${peloader_srcs}

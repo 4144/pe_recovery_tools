@@ -9,6 +9,7 @@
 
 #include "pe_hdrs_helper.h"
 #include "pe_raw_to_virtual.h"
+#include "exported_func.h"
 
 size_t forwarderNameLen(BYTE* fPtr); 
 

@@ -57,7 +57,8 @@ std::string formatDllFunc(const std::string& str)
 size_t make_lookup_tables(std::string moduleName, ULONGLONG remoteBase, PVOID modulePtr, 
                                 std::map<std::string, std::set<std::string>> &forwarders_lookup,
                                 std::map<ULONGLONG, std::set<std::string>> &va_to_names,
-                                std::map<std::string, ULONGLONG> &name_to_va
+                                std::map<std::string, ULONGLONG> &name_to_va,
+                                std::map<ULONGLONG, std::set<ExportedFunc>> &va_to_func
                                 )
 {
     std::string dllName = getDllName(moduleName);
@@ -100,6 +101,7 @@ size_t make_lookup_tables(std::string moduleName, ULONGLONG remoteBase, PVOID mo
             if (name_to_va[forwardedFunc] != 0) {
                 ULONGLONG va = name_to_va[forwardedFunc];
                 va_to_names[va].insert(currFuncName);
+                va_to_func[va].insert(ExportedFunc(va, dllName, name, 0));
                 name_to_va[currFuncName] = va;
             }
             forwarded_ctr++;
@@ -108,6 +110,7 @@ size_t make_lookup_tables(std::string moduleName, ULONGLONG remoteBase, PVOID mo
             //not forwarded, simple case:
             ULONGLONG va = remoteBase + (*funcRVA);
             va_to_names[va].insert(currFuncName);
+            va_to_func[va].insert(ExportedFunc(va, dllName, name, 0));
             name_to_va[currFuncName] = va;
 
             //resolve forwarders of this function (if any):
@@ -119,10 +122,12 @@ size_t make_lookup_tables(std::string moduleName, ULONGLONG remoteBase, PVOID mo
                 for (sItr = fItr->second.begin(); sItr != fItr->second.end(); sItr++) {
                     //printf("-> %s\n", sItr->c_str());
                     va_to_names[va].insert(*sItr);
+                    va_to_func[va].insert(ExportedFunc(va, dllName, name, 0));
                     name_to_va[*sItr] = va;
                 }
             }
         }
     }
+
     return forwarded_ctr;
 }

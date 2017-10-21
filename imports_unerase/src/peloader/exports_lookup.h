@@ -22,5 +22,6 @@ std::string formatDllFunc(const std::string& str);
 size_t make_lookup_tables(std::string moduleName, ULONGLONG remoteBase, PVOID modulePtr, 
                                 std::map<std::string, std::set<std::string>> &forwarders_lookup,
                                 std::map<ULONGLONG, std::set<std::string>> &va_to_names,
-                                std::map<std::string, ULONGLONG> &name_to_va
+                                std::map<std::string, ULONGLONG> &name_to_va,
+                                std::map<ULONGLONG, std::set<ExportedFunc>> &va_to_func
                                 );

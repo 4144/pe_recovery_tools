@@ -32,6 +32,25 @@ size_t enum_modules_in_process(DWORD process_id, std::map<ULONGLONG, MODULEENTRY
     return modules;
 }
 
+void print_va_to_func(std::map<ULONGLONG, std::set<ExportedFunc>> &va_to_func)
+{
+    static FILE *fp = fopen("testfile.txt", "a+");
+
+    std::map<ULONGLONG, std::set<ExportedFunc>>::iterator mItr;
+    for (mItr = va_to_func.begin(); mItr != va_to_func.end(); mItr++) {
+        std::set<ExportedFunc> &funcSet = mItr->second;
+        std::set<ExportedFunc>::iterator sItr;
+        for (sItr = funcSet.begin(); sItr != funcSet.end(); sItr++) {
+            const ExportedFunc &func = *sItr;
+            std::string str = func.toString();
+            if (fp) {
+                fprintf(fp, "%s\n", str.c_str());
+                fflush(fp);
+            }
+        }
+    }
+}
+
 bool prepare_mapping(DWORD pid, std::map<ULONGLONG, std::set<std::string>> &va_to_names)
 {
     std::map<std::string, std::set<std::string>> forwarders_lookup;
@@ -46,6 +65,8 @@ bool prepare_mapping(DWORD pid, std::map<ULONGLONG, std::set<std::string>> &va_t
     printf("Mapped modules: %d\n", num);
     size_t forwarding_dlls = 0;
 
+    std::map<ULONGLONG, std::set<ExportedFunc>> va_to_func; //TEST
+
     std::map<ULONGLONG, MODULEENTRY32>::iterator itr1;
     for (itr1 = modulesMap.begin(); itr1 != modulesMap.end(); itr1++) {
         size_t v_size = 0;
@@ -55,12 +76,14 @@ bool prepare_mapping(DWORD pid, std::map<ULONGLONG, std::set<std::string>> &va_t
             continue;
         }
         ULONGLONG remoteBase = (ULONGLONG) itr1->second.modBaseAddr;
-        size_t forwarded_ctr = make_lookup_tables(itr1->second.szExePath, remoteBase, mappedDLL, forwarders_lookup, va_to_names, name_to_va);
+
+        size_t forwarded_ctr = make_lookup_tables(itr1->second.szExePath, remoteBase, mappedDLL, forwarders_lookup, va_to_names, name_to_va, va_to_func);
         if (forwarded_ctr) {
             forwarding_dlls++;
         }
         VirtualFree(mappedDLL, v_size, MEM_FREE);
     }
+    print_va_to_func(va_to_func);
     printf("Found forwarding DLLs: %d\n", forwarding_dlls);
     return true;
 }
@@ -91,7 +114,7 @@ BYTE* load_file(char *filename, size_t &size)
 int main(int argc, char *argv[])
 {
     char *default_out_file = "out.bin";
-    char *version = "0.1.7";
+    char *version = "0.1.7-refactor";
     ULONGLONG loadBase = 0;
     if (argc < 3) {
         printf("[Imports_Unerase v%s]\n", version);
@@ -120,7 +143,7 @@ int main(int argc, char *argv[])
         system("pause");
         return -1;
     }
-
+    
     size_t size = 0;
     BYTE* buffer = load_file(argv[2], size);
     if (buffer == NULL) {
@@ -142,6 +165,7 @@ int main(int argc, char *argv[])
         printf("[+] Saved output to: %s\n", out_filename);
     }
     VirtualFree(buffer, size, MEM_FREE);
+    
     system("pause");
     return 0;
 }

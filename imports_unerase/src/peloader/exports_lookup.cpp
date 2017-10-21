@@ -21,28 +21,6 @@ size_t forwarderNameLen(BYTE* fPtr)
     return 0;
 }
 
-std::string getDllName(const std::string& str)
-{
-    std::size_t len = str.length();
-    std::size_t found = str.find_last_of("/\\");
-    std::size_t ext = str.find_last_of(".");
-    if (ext >= len) return "";
-
-    std::string name = str.substr(found+1, ext - (found+1));
-    std::transform(name.begin(), name.end(), name.begin(), easytolower);
-    return name;
-}
-
-std::string getFuncName(const std::string& str)
-{
-    std::size_t len = str.length();
-    std::size_t ext = str.find_last_of(".");
-    if (ext >= len) return "";
-
-    std::string name = str.substr(ext+1, len - (ext+1));
-    return name;
-}
-
 std::string formatDllFunc(const std::string& str)
 {
     std::string dllName = getDllName(str);
@@ -86,6 +64,7 @@ size_t make_lookup_tables(std::string moduleName, ULONGLONG remoteBase, PVOID mo
                                 std::map<std::string, std::set<std::string>> &forwarders_lookup,
                                 std::map<ULONGLONG, std::set<std::string>> &va_to_names,
                                 std::map<std::string, ULONGLONG> &name_to_va,
+                                std::map<ExportedFunc, std::set<ExportedFunc>> &forwarders_lookup2,
                                 std::map<ULONGLONG, std::set<ExportedFunc>> &va_to_func,
                                 std::map<ExportedFunc, ULONGLONG> &func_to_va
                                 )
@@ -120,15 +99,19 @@ size_t make_lookup_tables(std::string moduleName, ULONGLONG remoteBase, PVOID mo
        
         LPSTR name = (LPSTR)(*nameRVA + (BYTE*) modulePtr);
         std::string currFuncName = dllName + "." + name;
+        ExportedFunc currFunc(dllName, name, funcOrd);
+
         currFuncName = formatDllFunc(currFuncName);
 
         BYTE* fPtr = (BYTE*) modulePtr + (*funcRVA);
         if (forwarderNameLen(fPtr) > 1) {
-
             std::string forwardedFunc = formatDllFunc((char*)fPtr);
             if (forwardedFunc.length() == 0) {
                 continue;
             }
+
+            ExportedFunc forwarder(forwardedFunc);
+            forwarders_lookup2[forwarder].insert(currFunc);
             forwarders_lookup[forwardedFunc].insert(currFuncName);
 
             if (name_to_va[forwardedFunc] != 0) {
@@ -136,9 +119,8 @@ size_t make_lookup_tables(std::string moduleName, ULONGLONG remoteBase, PVOID mo
                 va_to_names[va].insert(currFuncName);
                 name_to_va[currFuncName] = va;
 
-                ExportedFunc func(va, dllName, name, funcOrd);
-                va_to_func[va].insert(func);
-                func_to_va[func] = va;
+                va_to_func[va].insert(currFunc);
+                func_to_va[currFunc] = va;
             }
             forwarded_ctr++;
             continue;
@@ -148,9 +130,8 @@ size_t make_lookup_tables(std::string moduleName, ULONGLONG remoteBase, PVOID mo
             va_to_names[va].insert(currFuncName);
             name_to_va[currFuncName] = va;
 
-            ExportedFunc func(va, dllName, name, funcOrd);
-            va_to_func[va].insert(func);
-            func_to_va[func] = va;
+            va_to_func[va].insert(currFunc);
+            func_to_va[currFunc] = va;
 
             //resolve forwarders of this function (if any):
 
@@ -163,9 +144,8 @@ size_t make_lookup_tables(std::string moduleName, ULONGLONG remoteBase, PVOID mo
                     va_to_names[va].insert(*sItr);
                     name_to_va[*sItr] = va;
 
-                    ExportedFunc func(va, dllName, name, funcOrd);
-                    va_to_func[va].insert(func);
-                    func_to_va[func] = va;
+                    va_to_func[va].insert(currFunc);
+                    func_to_va[currFunc] = va;
                 }
             }
         }

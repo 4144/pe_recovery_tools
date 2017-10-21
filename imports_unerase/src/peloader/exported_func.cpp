@@ -9,19 +9,38 @@ char easytolower(char in)
     return in;
 }
 
-
-ExportedFunc::ExportedFunc(DWORD rva, std::string libName, std::string funcName, DWORD funcOrdinal)
+std::string getDllName(const std::string& str)
 {
-    this->rva = rva;
+    std::size_t len = str.length();
+    std::size_t found = str.find_last_of("/\\");
+    std::size_t ext = str.find_last_of(".");
+    if (ext >= len) return "";
+
+    std::string name = str.substr(found+1, ext - (found+1));
+    std::transform(name.begin(), name.end(), name.begin(), easytolower);
+    return name;
+}
+
+std::string getFuncName(const std::string& str)
+{
+    std::size_t len = str.length();
+    std::size_t ext = str.find_last_of(".");
+    if (ext >= len) return "";
+
+    std::string name = str.substr(ext+1, len - (ext+1));
+    return name;
+}
+
+ExportedFunc::ExportedFunc(std::string libName, std::string funcName, DWORD funcOrdinal)
+{
     this->libName = ExportedFunc::formatName(libName);
     this->funcName = funcName;
     this->funcOrdinal = funcOrdinal;
     this->isByOrdinal = false;
 }
 
-ExportedFunc::ExportedFunc(DWORD rva, std::string libName, DWORD funcOrdinal)
+ExportedFunc::ExportedFunc(std::string libName, DWORD funcOrdinal)
 {
-    this->rva = rva;
     this->libName = ExportedFunc::formatName(libName);
     this->funcOrdinal = funcOrdinal;
     this->isByOrdinal = true;
@@ -29,11 +48,17 @@ ExportedFunc::ExportedFunc(DWORD rva, std::string libName, DWORD funcOrdinal)
 
 ExportedFunc::ExportedFunc(const ExportedFunc& other)
 {
-    this->rva = other.rva;
     this->libName = other.libName;
     this->funcName = other.funcName;
     this->funcOrdinal = other.funcOrdinal;
     this->isByOrdinal = other.isByOrdinal;
+}
+
+ExportedFunc::ExportedFunc(const std::string &forwarderName)
+{
+    this->funcName = getFuncName(forwarderName);
+    this->libName = getDllName(forwarderName);
+    this->isByOrdinal = false;
 }
 
 std::string ExportedFunc::formatName(std::string name)
@@ -48,6 +73,6 @@ std::string ExportedFunc::formatName(std::string name)
 std::string ExportedFunc::toString() const
 {
     char str[MAX_PATH*2] = { 0 }; //TODO: implement it in a better way
-    sprintf(str,"[%x] %s.%s %x", this->rva, this->libName.c_str(), this->funcName.c_str(), this->funcOrdinal);
+    sprintf(str,"%s.%s %x", this->libName.c_str(), this->funcName.c_str(), this->funcOrdinal);
     return str;
 }

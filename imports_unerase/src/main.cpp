@@ -68,6 +68,29 @@ void print_func_to_rva(std::map<ExportedFunc, ULONGLONG> &func_to_va)
     }
 }
 
+void print_forwarders(std::map<ExportedFunc, std::set<ExportedFunc>> &forwarders_lookup2)
+{
+    static FILE *fp = fopen("forwarders.txt", "a+");
+
+    std::map<ExportedFunc, std::set<ExportedFunc>>::iterator mItr;
+    for (mItr = forwarders_lookup2.begin(); mItr != forwarders_lookup2.end(); mItr++) {
+        const ExportedFunc &func = mItr->first;
+
+        const std::set<ExportedFunc> &fwdSet = mItr->second;
+        std::string str = func.toString();
+        if (fp) {
+            fprintf(fp, "> %s : %d\n", str.c_str(), fwdSet.size());
+            fflush(fp);
+        }
+        std::set<ExportedFunc>::iterator sItr;
+        for (sItr = fwdSet.begin(); sItr != fwdSet.end(); sItr++) {
+            const ExportedFunc &fwdFunc = *sItr;
+            std::string fwdStr = fwdFunc.toString();
+            fprintf(fp, "- %s\n", fwdStr.c_str());
+        }
+    }
+}
+
 
 bool prepare_mapping(DWORD pid, std::map<ULONGLONG, std::set<std::string>> &va_to_names)
 {
@@ -83,6 +106,7 @@ bool prepare_mapping(DWORD pid, std::map<ULONGLONG, std::set<std::string>> &va_t
     printf("Mapped modules: %d\n", num);
     size_t forwarding_dlls = 0;
 
+    std::map<ExportedFunc, std::set<ExportedFunc>> forwarders_lookup2; //TEST
     std::map<ULONGLONG, std::set<ExportedFunc>> va_to_func; //TEST
     std::map<ExportedFunc, ULONGLONG> func_to_va; //TEST
 
@@ -96,7 +120,7 @@ bool prepare_mapping(DWORD pid, std::map<ULONGLONG, std::set<std::string>> &va_t
         }
         ULONGLONG remoteBase = (ULONGLONG) itr1->second.modBaseAddr;
 
-        size_t forwarded_ctr = make_lookup_tables(itr1->second.szExePath, remoteBase, mappedDLL, forwarders_lookup, va_to_names, name_to_va, va_to_func, func_to_va);
+        size_t forwarded_ctr = make_lookup_tables(itr1->second.szExePath, remoteBase, mappedDLL, forwarders_lookup, va_to_names, name_to_va, forwarders_lookup2, va_to_func, func_to_va);
         if (forwarded_ctr) {
             forwarding_dlls++;
         }
@@ -104,6 +128,7 @@ bool prepare_mapping(DWORD pid, std::map<ULONGLONG, std::set<std::string>> &va_t
     }
     print_va_to_func(va_to_func); //TEST
     print_func_to_rva(func_to_va); //TEST
+    print_forwarders(forwarders_lookup2); //TEST
     printf("Found forwarding DLLs: %d\n", forwarding_dlls);
     return true;
 }

@@ -6,39 +6,37 @@
 #include <set>
 
 char easytolower(char in);
+std::string getDllName(const std::string& str);
+std::string getFuncName(const std::string& str);
 
 class ExportedFunc
 {
 public:
     static std::string formatName(std::string name);
 
-    DWORD rva;
     std::string libName;
     std::string funcName;
     DWORD funcOrdinal;
     bool isByOrdinal;
 
-    ExportedFunc(DWORD rva, std::string libName, std::string funcName, DWORD funcOrdinal);
-    ExportedFunc(DWORD rva, std::string libName, DWORD funcOrdinal);
     ExportedFunc(const ExportedFunc& other);
+    ExportedFunc(std::string libName, std::string funcName, DWORD funcOrdinal);
+    ExportedFunc(std::string libName, DWORD funcOrdinal);
+    ExportedFunc(const std::string &forwarderName);
 
     bool operator<(const ExportedFunc& other) const
     {
-        if (this->rva != other.rva) {
-            this->rva > other.rva;
-        }
         int cmp = libName.compare(other.libName);
         if (cmp != 0) {
             return cmp < 0;
         }
-        if (isByOrdinal) {
-            this->funcOrdinal < other.funcOrdinal;
-        }
         cmp = funcName.compare(other.funcName);
-        if (cmp != 0) {
-            return cmp < 0;
+        if (this->funcName.length() != 0 && other.funcName.length() != 0) {
+            if (cmp != 0) {
+                return cmp < 0;
+            }
         }
-        this->funcOrdinal < other.funcOrdinal;
+        return this->funcOrdinal < other.funcOrdinal;
     }
 
     std::string ExportedFunc::toString() const;

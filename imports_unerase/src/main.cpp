@@ -34,7 +34,7 @@ size_t enum_modules_in_process(DWORD process_id, std::map<ULONGLONG, MODULEENTRY
 
 void print_va_to_func(std::map<ULONGLONG, std::set<ExportedFunc>> &va_to_func)
 {
-    static FILE *fp = fopen("testfile.txt", "a+");
+    static FILE *fp = fopen("va_to_func.txt", "a+");
 
     std::map<ULONGLONG, std::set<ExportedFunc>>::iterator mItr;
     for (mItr = va_to_func.begin(); mItr != va_to_func.end(); mItr++) {
@@ -51,6 +51,24 @@ void print_va_to_func(std::map<ULONGLONG, std::set<ExportedFunc>> &va_to_func)
     }
 }
 
+void print_func_to_rva(std::map<ExportedFunc, ULONGLONG> &func_to_va)
+{
+    static FILE *fp = fopen("func_to_rva.txt", "a+");
+
+    std::map<ExportedFunc, ULONGLONG>::iterator mItr;
+    for (mItr = func_to_va.begin(); mItr != func_to_va.end(); mItr++) {
+        const ExportedFunc &func = mItr->first;
+        const ULONGLONG va = mItr->second;
+        std::string str = func.toString();
+
+        if (fp) {
+            fprintf(fp, "%s\n", str.c_str());
+            fflush(fp);
+        }
+    }
+}
+
+
 bool prepare_mapping(DWORD pid, std::map<ULONGLONG, std::set<std::string>> &va_to_names)
 {
     std::map<std::string, std::set<std::string>> forwarders_lookup;
@@ -66,6 +84,7 @@ bool prepare_mapping(DWORD pid, std::map<ULONGLONG, std::set<std::string>> &va_t
     size_t forwarding_dlls = 0;
 
     std::map<ULONGLONG, std::set<ExportedFunc>> va_to_func; //TEST
+    std::map<ExportedFunc, ULONGLONG> func_to_va; //TEST
 
     std::map<ULONGLONG, MODULEENTRY32>::iterator itr1;
     for (itr1 = modulesMap.begin(); itr1 != modulesMap.end(); itr1++) {
@@ -77,13 +96,14 @@ bool prepare_mapping(DWORD pid, std::map<ULONGLONG, std::set<std::string>> &va_t
         }
         ULONGLONG remoteBase = (ULONGLONG) itr1->second.modBaseAddr;
 
-        size_t forwarded_ctr = make_lookup_tables(itr1->second.szExePath, remoteBase, mappedDLL, forwarders_lookup, va_to_names, name_to_va, va_to_func);
+        size_t forwarded_ctr = make_lookup_tables(itr1->second.szExePath, remoteBase, mappedDLL, forwarders_lookup, va_to_names, name_to_va, va_to_func, func_to_va);
         if (forwarded_ctr) {
             forwarding_dlls++;
         }
         VirtualFree(mappedDLL, v_size, MEM_FREE);
     }
-    print_va_to_func(va_to_func);
+    print_va_to_func(va_to_func); //TEST
+    print_func_to_rva(func_to_va); //TEST
     printf("Found forwarding DLLs: %d\n", forwarding_dlls);
     return true;
 }

@@ -24,10 +24,21 @@ public:
 
     bool operator<(const ExportedFunc& other) const
     {
-        if (libName == other.libName) {
-            return (funcName > other.funcName);
+        if (this->rva != other.rva) {
+            this->rva > other.rva;
         }
-         return (libName > other.libName);
+        int cmp = libName.compare(other.libName);
+        if (cmp != 0) {
+            return cmp < 0;
+        }
+        if (isByOrdinal) {
+            this->funcOrdinal < other.funcOrdinal;
+        }
+        cmp = funcName.compare(other.funcName);
+        if (cmp != 0) {
+            return cmp < 0;
+        }
+        this->funcOrdinal < other.funcOrdinal;
     }
 
     std::string ExportedFunc::toString() const;

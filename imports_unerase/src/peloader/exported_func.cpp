@@ -31,6 +31,17 @@ std::string getFuncName(const std::string& str)
     return name;
 }
 
+std::string formatDllFunc(const std::string& str)
+{
+    std::string dllName = getDllName(str);
+    std::string funcName = getFuncName(str);
+    if (dllName.length() == 0 || funcName.length() == 0) {
+        return "";
+    }
+    std::transform(dllName.begin(), dllName.end(), dllName.begin(), easytolower);
+    return dllName + "." + funcName;
+}
+
 ExportedFunc::ExportedFunc(std::string libName, std::string funcName, DWORD funcOrdinal)
 {
     this->libName = ExportedFunc::formatName(libName);

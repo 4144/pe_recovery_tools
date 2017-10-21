@@ -5,9 +5,7 @@
 #include <algorithm>
 #include <set>
 
-char easytolower(char in);
-std::string getDllName(const std::string& str);
-std::string getFuncName(const std::string& str);
+std::string formatDllFunc(const std::string& str);
 
 class ExportedFunc
 {

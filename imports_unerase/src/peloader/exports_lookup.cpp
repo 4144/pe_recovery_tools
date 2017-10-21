@@ -20,7 +20,7 @@ size_t forwarderNameLen(BYTE* fPtr)
     }
     return 0;
 }
-
+/*
 std::string formatDllFunc(const std::string& str)
 {
     std::string dllName = getDllName(str);
@@ -31,7 +31,7 @@ std::string formatDllFunc(const std::string& str)
     std::transform(dllName.begin(), dllName.end(), dllName.begin(), easytolower);
     return dllName + "." + funcName;
 }
-
+*/
 size_t make_ord_lookup_tables(ULONGLONG remoteBase, PVOID modulePtr, 
                                 std::map<ULONGLONG, DWORD> &va_to_ord
                                 )
@@ -119,8 +119,6 @@ size_t make_lookup_tables(std::string moduleName, ULONGLONG remoteBase, PVOID mo
         //std::string currFuncName = dllName + "." + name;
         ExportedFunc currFunc(dllName, name, funcOrd);
 
-        //currFuncName = formatDllFunc(currFuncName);
-
         BYTE* fPtr = (BYTE*) modulePtr + (*funcRVA);
         if (forwarderNameLen(fPtr) > 1) {
             std::string forwardedFunc = formatDllFunc((char*)fPtr);
@@ -130,7 +128,6 @@ size_t make_lookup_tables(std::string moduleName, ULONGLONG remoteBase, PVOID mo
 
             ExportedFunc forwarder(forwardedFunc);
             forwarders_lookup2[forwarder].insert(currFunc);
-            //forwarders_lookup[forwardedFunc].insert(currFuncName);
 
             if (func_to_va[forwarder] != 0) {
                 ULONGLONG va = func_to_va[forwarder];

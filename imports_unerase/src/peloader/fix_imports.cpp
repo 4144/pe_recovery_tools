@@ -11,12 +11,11 @@ struct FuncNameLengthCompare
         const size_t rhsLength = p_rhs.funcName.length();
 
         if (lhsLength == rhsLength) {
-            return (p_lhs < p_rhs);
+            return (p_lhs.funcName.compare(p_rhs.funcName));
         }
         return (lhsLength < rhsLength); // compares with the length
     }
 };
-
 
 LPVOID search_name(std::string name, const char* modulePtr, size_t moduleSize)
 {
@@ -125,7 +124,9 @@ bool fillImportNames32(IMAGE_IMPORT_DESCRIPTOR* lib_desc, LPVOID modulePtr, size
 
             if (!is_name_saved) {
                 printf("[-] Cannot save! Invalid pointer to the function name!\n");
-                printf("Try ordinal: %x\n", lastOrdinal);
+                if (lastOrdinal != 0) {
+                    printf("Ordinal: %x\n", lastOrdinal);
+                }
                 //TODO: create a new section to store the names
             }
         }

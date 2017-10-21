@@ -6,6 +6,7 @@
 #include <set>
 
 std::string formatDllFunc(const std::string& str);
+size_t forwarderNameLen(BYTE* fPtr);
 
 class ExportedFunc
 {
@@ -30,9 +31,7 @@ public:
         }
         cmp = funcName.compare(other.funcName);
         if (this->funcName.length() != 0 && other.funcName.length() != 0) {
-            if (cmp != 0) {
-                return cmp < 0;
-            }
+            return cmp < 0;
         }
         return this->funcOrdinal < other.funcOrdinal;
     }

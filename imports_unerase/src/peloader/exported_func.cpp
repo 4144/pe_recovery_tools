@@ -21,6 +21,25 @@ std::string getDllName(const std::string& str)
     return name;
 }
 
+size_t forwarderNameLen(BYTE* fPtr)
+{
+    size_t len = 0;
+    while ((*fPtr >= 'a' && *fPtr <= 'z')
+            || (*fPtr >= 'A' && *fPtr <= 'Z')
+            || (*fPtr >= '0' && *fPtr <= '9')
+            || (*fPtr == '.')
+            || (*fPtr == '_') 
+            || (*fPtr == '-'))
+    {
+        len++;
+        fPtr++;
+    }
+    if (*fPtr == '\0') {
+        return len;
+    }
+    return 0;
+}
+
 std::string getFuncName(const std::string& str)
 {
     std::size_t len = str.length();

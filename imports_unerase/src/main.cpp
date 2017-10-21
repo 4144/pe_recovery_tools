@@ -197,7 +197,6 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    std::map<ULONGLONG, std::set<std::string>> va_to_names; //abandoned, TODO: refactor to use: va_to_func
     if (fixImports(buffer, size, va_to_func) == false) {
         printf("[ERROR] Cannot reconstruct imports!\n");
         system("pause");

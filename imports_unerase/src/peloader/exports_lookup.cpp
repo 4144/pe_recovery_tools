@@ -1,37 +1,6 @@
 #include "exports_lookup.h"
-
 #include <algorithm>
 
-size_t forwarderNameLen(BYTE* fPtr)
-{
-    size_t len = 0;
-    while ((*fPtr >= 'a' && *fPtr <= 'z')
-            || (*fPtr >= 'A' && *fPtr <= 'Z')
-            || (*fPtr >= '0' && *fPtr <= '9')
-            || (*fPtr == '.')
-            || (*fPtr == '_') 
-            || (*fPtr == '-'))
-    {
-        len++;
-        fPtr++;
-    }
-    if (*fPtr == '\0') {
-        return len;
-    }
-    return 0;
-}
-/*
-std::string formatDllFunc(const std::string& str)
-{
-    std::string dllName = getDllName(str);
-    std::string funcName = getFuncName(str);
-    if (dllName.length() == 0 || funcName.length() == 0) {
-        return "";
-    }
-    std::transform(dllName.begin(), dllName.end(), dllName.begin(), easytolower);
-    return dllName + "." + funcName;
-}
-*/
 size_t make_ord_lookup_tables(ULONGLONG remoteBase, PVOID modulePtr, 
                                 std::map<ULONGLONG, DWORD> &va_to_ord
                                 )
@@ -116,7 +85,6 @@ size_t make_lookup_tables(std::string moduleName, ULONGLONG remoteBase, PVOID mo
         DWORD funcOrd = va_to_ord[(ULONGLONG)funcRVA];
        
         LPSTR name = (LPSTR)(*nameRVA + (BYTE*) modulePtr);
-        //std::string currFuncName = dllName + "." + name;
         ExportedFunc currFunc(dllName, name, funcOrd);
 
         BYTE* fPtr = (BYTE*) modulePtr + (*funcRVA);

@@ -159,7 +159,7 @@ BYTE* load_file(char *filename, size_t &size)
 int main(int argc, char *argv[])
 {
     char *default_out_file = "out.bin";
-    char *version = "0.1.8d-refactor";
+    char *version = "0.1.8";
     ULONGLONG loadBase = 0;
     if (argc < 3) {
         printf("[Imports_Unerase v%s]\n", version);

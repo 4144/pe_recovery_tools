@@ -109,16 +109,16 @@ bool fillImportNames32(IMAGE_IMPORT_DESCRIPTOR* lib_desc, LPVOID modulePtr, size
                     //TODO: maybe it is imported by ordinal?
                     continue;
                 }
-                DWORD offset = static_cast<DWORD>((ULONGLONG)found_ptr - (ULONGLONG)modulePtr);
+                const DWORD offset = static_cast<DWORD>((ULONGLONG)found_ptr - (ULONGLONG)modulePtr);
 
                 //if it is not the first name from the list, inform about it:
                 if (funcname_itr != addr_to_func[searchedAddr].begin()) {
                     printf("[*] %s\n", found_func.funcName.c_str());
                 }
                 printf("[+] Found the name at: %llx\n", static_cast<ULONGLONG>(offset));
-                offset -= sizeof(WORD);
+                const DWORD name_offset = offset - sizeof(WORD);
                 //TODO: validate more...
-                memcpy(call_via_ptr, &offset, sizeof(DWORD)); 
+                memcpy(call_via_ptr, &name_offset, sizeof(DWORD)); 
                 is_name_saved = true;
             }
 
@@ -126,6 +126,8 @@ bool fillImportNames32(IMAGE_IMPORT_DESCRIPTOR* lib_desc, LPVOID modulePtr, size
                 printf("[-] Cannot save! Invalid pointer to the function name!\n");
                 if (lastOrdinal != 0) {
                     printf("Ordinal: %x\n", lastOrdinal);
+                    DWORD ord_thunk = lastOrdinal | IMAGE_ORDINAL_FLAG32;
+                    memcpy(call_via_ptr, &ord_thunk, sizeof(DWORD)); 
                 }
                 //TODO: create a new section to store the names
             }

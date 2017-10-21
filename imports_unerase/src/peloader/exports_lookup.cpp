@@ -59,11 +59,29 @@ size_t make_ord_lookup_tables(ULONGLONG remoteBase, PVOID modulePtr,
     return functCount - forwarded_ctr;
 }
 
+size_t resolve_forwarders(const ULONGLONG va, ExportedFunc &currFunc,
+    std::map<ExportedFunc, std::set<ExportedFunc>> &forwarders_lookup,
+    std::map<ULONGLONG, std::set<ExportedFunc>> &va_to_func,
+    std::map<ExportedFunc, ULONGLONG> &func_to_va
+    )
+{
+    size_t resolved = 0;
+    //resolve forwarders of this function (if any):
+    std::map<ExportedFunc, std::set<ExportedFunc>>::iterator fItr = forwarders_lookup.find(currFunc);
+    if (fItr != forwarders_lookup.end()) {
+        //printf("[+] Forwarders (%d):\n", fItr->second.size());
+        std::set<ExportedFunc>::iterator sItr;
+        for (sItr = fItr->second.begin(); sItr != fItr->second.end(); sItr++) {
+            //printf("-> %s\n", sItr->c_str());
+            va_to_func[va].insert(*sItr);
+            func_to_va[*sItr] = va;
+            resolved++;
+        }
+    }
+    return resolved;
+}
 
-size_t make_lookup_tables(std::string moduleName, ULONGLONG remoteBase, PVOID modulePtr, 
-                                std::map<std::string, std::set<std::string>> &forwarders_lookup,
-                                std::map<ULONGLONG, std::set<std::string>> &va_to_names,
-                                std::map<std::string, ULONGLONG> &name_to_va,
+size_t make_lookup_tables(std::string moduleName, ULONGLONG remoteBase, PVOID modulePtr,
                                 std::map<ExportedFunc, std::set<ExportedFunc>> &forwarders_lookup2,
                                 std::map<ULONGLONG, std::set<ExportedFunc>> &va_to_func,
                                 std::map<ExportedFunc, ULONGLONG> &func_to_va
@@ -98,10 +116,10 @@ size_t make_lookup_tables(std::string moduleName, ULONGLONG remoteBase, PVOID mo
         DWORD funcOrd = va_to_ord[(ULONGLONG)funcRVA];
        
         LPSTR name = (LPSTR)(*nameRVA + (BYTE*) modulePtr);
-        std::string currFuncName = dllName + "." + name;
+        //std::string currFuncName = dllName + "." + name;
         ExportedFunc currFunc(dllName, name, funcOrd);
 
-        currFuncName = formatDllFunc(currFuncName);
+        //currFuncName = formatDllFunc(currFuncName);
 
         BYTE* fPtr = (BYTE*) modulePtr + (*funcRVA);
         if (forwarderNameLen(fPtr) > 1) {
@@ -112,13 +130,10 @@ size_t make_lookup_tables(std::string moduleName, ULONGLONG remoteBase, PVOID mo
 
             ExportedFunc forwarder(forwardedFunc);
             forwarders_lookup2[forwarder].insert(currFunc);
-            forwarders_lookup[forwardedFunc].insert(currFuncName);
+            //forwarders_lookup[forwardedFunc].insert(currFuncName);
 
-            if (name_to_va[forwardedFunc] != 0) {
-                ULONGLONG va = name_to_va[forwardedFunc];
-                va_to_names[va].insert(currFuncName);
-                name_to_va[currFuncName] = va;
-
+            if (func_to_va[forwarder] != 0) {
+                ULONGLONG va = func_to_va[forwarder];
                 va_to_func[va].insert(currFunc);
                 func_to_va[currFunc] = va;
             }
@@ -127,27 +142,11 @@ size_t make_lookup_tables(std::string moduleName, ULONGLONG remoteBase, PVOID mo
         } else {
             //not forwarded, simple case:
             ULONGLONG va = remoteBase + (*funcRVA);
-            va_to_names[va].insert(currFuncName);
-            name_to_va[currFuncName] = va;
-
             va_to_func[va].insert(currFunc);
             func_to_va[currFunc] = va;
 
             //resolve forwarders of this function (if any):
-
-            std::map<std::string, std::set<std::string>>::iterator fItr = forwarders_lookup.find(currFuncName);
-            if (fItr != forwarders_lookup.end()) {
-                //printf("[+] Forwarders (%d):\n", fItr->second.size());
-                std::set<std::string>::iterator sItr;
-                for (sItr = fItr->second.begin(); sItr != fItr->second.end(); sItr++) {
-                    //printf("-> %s\n", sItr->c_str());
-                    va_to_names[va].insert(*sItr);
-                    name_to_va[*sItr] = va;
-
-                    va_to_func[va].insert(currFunc);
-                    func_to_va[currFunc] = va;
-                }
-            }
+            resolve_forwarders(va, currFunc, forwarders_lookup2, va_to_func, func_to_va);
         }
     }
     return forwarded_ctr;

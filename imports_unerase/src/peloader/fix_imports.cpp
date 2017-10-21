@@ -161,7 +161,7 @@ size_t findAddressesToFill32(DWORD call_via, DWORD thunk_addr, LPVOID modulePtr,
     return addrCounter;
 }
 
-std::string findDllName(std::set<ULONGLONG> &addresses, std::map<ULONGLONG, std::set<std::string>> &va_to_names)
+std::string findDllName(std::set<ULONGLONG> &addresses, std::map<ULONGLONG, std::set<ExportedFunc>> &va_to_func)
 {
     std::set<std::string> dllNames;
     bool isFresh = true;
@@ -170,18 +170,16 @@ std::string findDllName(std::set<ULONGLONG> &addresses, std::map<ULONGLONG, std:
     for (addrItr = addresses.begin(); addrItr != addresses.end(); addrItr++) {
         ULONGLONG searchedAddr = *addrItr;
         //---
-        std::map<ULONGLONG, std::set<std::string>>::iterator fItr1 = va_to_names.find(searchedAddr);
+        std::map<ULONGLONG, std::set<ExportedFunc>>::iterator fItr1 = va_to_func.find(searchedAddr);
         
-        if (fItr1 != va_to_names.end()) {
+        if (fItr1 != va_to_func.end()) {
             std::set<std::string> currDllNames;
 
-            for (std::set<std::string>::iterator strItr = fItr1->second.begin(); 
+            for (std::set<ExportedFunc>::iterator strItr = fItr1->second.begin(); 
                 strItr != fItr1->second.end(); 
                 strItr++)
             {
-                std::string dll_name = getDllName(*strItr);
-
-                std::string imp_dll_name = getDllName(*strItr);
+                std::string imp_dll_name = strItr->libName;
                 currDllNames.insert(imp_dll_name);
             }
 
@@ -206,7 +204,7 @@ std::string findDllName(std::set<ULONGLONG> &addresses, std::map<ULONGLONG, std:
 
 size_t mapAddressesToFunctions(std::set<ULONGLONG> &addresses, 
                                std::string coveringDll, 
-                               std::map<ULONGLONG, std::set<std::string>> &va_to_names, 
+                               std::map<ULONGLONG, std::set<ExportedFunc>> &va_to_func, 
                                OUT std::map<ULONGLONG, std::set<std::string, StringLengthCompare>> &addr_to_func
                                )
 {
@@ -216,18 +214,18 @@ size_t mapAddressesToFunctions(std::set<ULONGLONG> &addresses,
 
         ULONGLONG searchedAddr = *addrItr;
         //---
-        std::map<ULONGLONG, std::set<std::string>>::iterator fItr1 = va_to_names.find(searchedAddr);
+        std::map<ULONGLONG, std::set<ExportedFunc>>::iterator fItr1 = va_to_func.find(searchedAddr);
         
-        if (fItr1 != va_to_names.end()) {
+        if (fItr1 != va_to_func.end()) {
             std::set<std::string> currDllNames;
 
-            for (std::set<std::string>::iterator strItr = fItr1->second.begin(); 
+            for (std::set<ExportedFunc>::iterator strItr = fItr1->second.begin(); 
                 strItr != fItr1->second.end(); 
                 strItr++)
             {
-                std::string dll_name = getDllName(*strItr);
+                std::string dll_name = strItr->libName;
                 if (dll_name == coveringDll) {
-                    std::string funcName = getFuncName(*strItr);
+                    std::string funcName = strItr->funcName;
                     addr_to_func[searchedAddr].insert(funcName);
                     coveredCount++;
                 }
@@ -237,7 +235,7 @@ size_t mapAddressesToFunctions(std::set<ULONGLONG> &addresses,
     return coveredCount;
 }
 
-bool fixImports(PVOID modulePtr, size_t moduleSize, std::map<ULONGLONG, std::set<std::string>> va_to_names)
+bool fixImports(PVOID modulePtr, size_t moduleSize, std::map<ULONGLONG, std::set<ExportedFunc>> &va_to_func)
 {
     bool is64 = is64bit((BYTE*)modulePtr);
 
@@ -282,7 +280,7 @@ bool fixImports(PVOID modulePtr, size_t moduleSize, std::map<ULONGLONG, std::set
         }
         if (lib_name.length() == 0) {
             printf("Erased DLL name\n");
-            lib_name = findDllName(addresses, va_to_names);
+            lib_name = findDllName(addresses, va_to_func);
             if (lib_name.length() != 0) {
                 std::string found_name = lib_name + ".dll";
                 name_ptr = (LPSTR)((ULONGLONG) modulePtr + lib_desc->Name);
@@ -302,7 +300,7 @@ bool fixImports(PVOID modulePtr, size_t moduleSize, std::map<ULONGLONG, std::set
         }
         printf("# %s\n", lib_name.c_str());
         OUT std::map<ULONGLONG, std::set<std::string, StringLengthCompare>> addr_to_func;
-        size_t coveredCount = mapAddressesToFunctions(addresses, lib_name, va_to_names, addr_to_func); 
+        size_t coveredCount = mapAddressesToFunctions(addresses, lib_name, va_to_func, addr_to_func); 
         if (coveredCount != addresses.size()) {
             printf("[-] Not all addresses are covered!\n");
         } else {

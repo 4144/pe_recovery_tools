@@ -38,13 +38,14 @@ void print_va_to_func(std::map<ULONGLONG, std::set<ExportedFunc>> &va_to_func)
 
     std::map<ULONGLONG, std::set<ExportedFunc>>::iterator mItr;
     for (mItr = va_to_func.begin(); mItr != va_to_func.end(); mItr++) {
+        ULONGLONG va = mItr->first;
         std::set<ExportedFunc> &funcSet = mItr->second;
         std::set<ExportedFunc>::iterator sItr;
         for (sItr = funcSet.begin(); sItr != funcSet.end(); sItr++) {
             const ExportedFunc &func = *sItr;
             std::string str = func.toString();
             if (fp) {
-                fprintf(fp, "%s\n", str.c_str());
+                fprintf(fp, "[%llx] %s\n", va, str.c_str());
                 fflush(fp);
             }
         }
@@ -62,7 +63,7 @@ void print_func_to_rva(std::map<ExportedFunc, ULONGLONG> &func_to_va)
         std::string str = func.toString();
 
         if (fp) {
-            fprintf(fp, "%s\n", str.c_str());
+            fprintf(fp, "[%llx] %s\n", va, str.c_str());
             fflush(fp);
         }
     }
@@ -92,7 +93,7 @@ void print_forwarders(std::map<ExportedFunc, std::set<ExportedFunc>> &forwarders
 }
 
 
-bool prepare_mapping(DWORD pid, std::map<ULONGLONG, std::set<std::string>> &va_to_names)
+bool prepare_mapping(DWORD pid, std::map<ULONGLONG, std::set<ExportedFunc>> &va_to_func)
 {
     std::map<std::string, std::set<std::string>> forwarders_lookup;
     std::map<std::string, ULONGLONG> name_to_va;
@@ -107,7 +108,6 @@ bool prepare_mapping(DWORD pid, std::map<ULONGLONG, std::set<std::string>> &va_t
     size_t forwarding_dlls = 0;
 
     std::map<ExportedFunc, std::set<ExportedFunc>> forwarders_lookup2; //TEST
-    std::map<ULONGLONG, std::set<ExportedFunc>> va_to_func; //TEST
     std::map<ExportedFunc, ULONGLONG> func_to_va; //TEST
 
     std::map<ULONGLONG, MODULEENTRY32>::iterator itr1;
@@ -120,7 +120,7 @@ bool prepare_mapping(DWORD pid, std::map<ULONGLONG, std::set<std::string>> &va_t
         }
         ULONGLONG remoteBase = (ULONGLONG) itr1->second.modBaseAddr;
 
-        size_t forwarded_ctr = make_lookup_tables(itr1->second.szExePath, remoteBase, mappedDLL, forwarders_lookup, va_to_names, name_to_va, forwarders_lookup2, va_to_func, func_to_va);
+        size_t forwarded_ctr = make_lookup_tables(itr1->second.szExePath, remoteBase, mappedDLL, forwarders_lookup2, va_to_func, func_to_va);
         if (forwarded_ctr) {
             forwarding_dlls++;
         }
@@ -159,7 +159,7 @@ BYTE* load_file(char *filename, size_t &size)
 int main(int argc, char *argv[])
 {
     char *default_out_file = "out.bin";
-    char *version = "0.1.7-refactor";
+    char *version = "0.1.8-refactor";
     ULONGLONG loadBase = 0;
     if (argc < 3) {
         printf("[Imports_Unerase v%s]\n", version);
@@ -181,8 +181,8 @@ int main(int argc, char *argv[])
     if (pid == 0) pid = GetCurrentProcessId();
     printf("PID: %d\n", pid);
 
-    std::map<ULONGLONG, std::set<std::string>> va_to_names;
-    bool isOk = prepare_mapping(pid, va_to_names);
+    std::map<ULONGLONG, std::set<ExportedFunc>> va_to_func;
+    bool isOk = prepare_mapping(pid, va_to_func);
     if (!isOk) {
         printf("[-] Mapping failed.\n");
         system("pause");
@@ -197,7 +197,8 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    if (fixImports(buffer, size, va_to_names) == false) {
+    std::map<ULONGLONG, std::set<std::string>> va_to_names; //abandoned, TODO: refactor to use: va_to_func
+    if (fixImports(buffer, size, va_to_func) == false) {
         printf("[ERROR] Cannot reconstruct imports!\n");
         system("pause");
         return -1;

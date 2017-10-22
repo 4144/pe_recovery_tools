@@ -307,7 +307,6 @@ bool fixImports(PVOID modulePtr, size_t moduleSize, std::map<ULONGLONG, std::set
         }
         printf("# %s\n", lib_name.c_str());
         OUT std::map<ULONGLONG, std::set<ExportedFunc, FuncNameLengthCompare>> addr_to_func;
-        //OUT std::map<ULONGLONG, std::set<std::string, StringLengthCompare>> addr_to_func;
         size_t coveredCount = mapAddressesToFunctions(addresses, lib_name, va_to_func, addr_to_func); 
         if (coveredCount != addresses.size()) {
             printf("[-] Not all addresses are covered!\n");

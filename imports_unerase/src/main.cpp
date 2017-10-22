@@ -95,9 +95,6 @@ void print_forwarders(std::map<ExportedFunc, std::set<ExportedFunc>> &forwarders
 
 bool prepare_mapping(DWORD pid, std::map<ULONGLONG, std::set<ExportedFunc>> &va_to_func)
 {
-    std::map<std::string, std::set<std::string>> forwarders_lookup;
-    std::map<std::string, ULONGLONG> name_to_va;
-
     std::map<ULONGLONG, MODULEENTRY32> modulesMap;
     int num = enum_modules_in_process(pid, modulesMap);
     if (num == 0) {
@@ -107,8 +104,8 @@ bool prepare_mapping(DWORD pid, std::map<ULONGLONG, std::set<ExportedFunc>> &va_
     printf("Mapped modules: %d\n", num);
     size_t forwarding_dlls = 0;
 
-    std::map<ExportedFunc, std::set<ExportedFunc>> forwarders_lookup2; //TEST
-    std::map<ExportedFunc, ULONGLONG> func_to_va; //TEST
+    std::map<ExportedFunc, std::set<ExportedFunc>> forwarders_lookup;
+    std::map<ExportedFunc, ULONGLONG> func_to_va;
 
     std::map<ULONGLONG, MODULEENTRY32>::iterator itr1;
     for (itr1 = modulesMap.begin(); itr1 != modulesMap.end(); itr1++) {
@@ -120,15 +117,17 @@ bool prepare_mapping(DWORD pid, std::map<ULONGLONG, std::set<ExportedFunc>> &va_
         }
         ULONGLONG remoteBase = (ULONGLONG) itr1->second.modBaseAddr;
 
-        size_t forwarded_ctr = make_lookup_tables(itr1->second.szExePath, remoteBase, mappedDLL, forwarders_lookup2, va_to_func, func_to_va);
+        size_t forwarded_ctr = make_lookup_tables(itr1->second.szExePath, remoteBase, mappedDLL, forwarders_lookup, va_to_func, func_to_va);
         if (forwarded_ctr) {
             forwarding_dlls++;
         }
         VirtualFree(mappedDLL, v_size, MEM_FREE);
     }
+    /*
     print_va_to_func(va_to_func); //TEST
     print_func_to_rva(func_to_va); //TEST
     print_forwarders(forwarders_lookup2); //TEST
+    */
     printf("Found forwarding DLLs: %d\n", forwarding_dlls);
     return true;
 }
@@ -159,7 +158,7 @@ BYTE* load_file(char *filename, size_t &size)
 int main(int argc, char *argv[])
 {
     char *default_out_file = "out.bin";
-    char *version = "0.1.8";
+    char *version = "0.1.8-refact";
     ULONGLONG loadBase = 0;
     if (argc < 3) {
         printf("[Imports_Unerase v%s]\n", version);

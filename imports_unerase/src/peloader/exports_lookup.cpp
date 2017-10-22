@@ -51,7 +51,7 @@ size_t resolve_forwarders(const ULONGLONG va, ExportedFunc &currFunc,
 }
 
 size_t make_lookup_tables(std::string moduleName, ULONGLONG remoteBase, PVOID modulePtr,
-                                std::map<ExportedFunc, std::set<ExportedFunc>> &forwarders_lookup2,
+                                std::map<ExportedFunc, std::set<ExportedFunc>> &forwarders_lookup,
                                 std::map<ULONGLONG, std::set<ExportedFunc>> &va_to_func,
                                 std::map<ExportedFunc, ULONGLONG> &func_to_va
                                 )
@@ -95,7 +95,7 @@ size_t make_lookup_tables(std::string moduleName, ULONGLONG remoteBase, PVOID mo
             }
 
             ExportedFunc forwarder(forwardedFunc);
-            forwarders_lookup2[forwarder].insert(currFunc);
+            forwarders_lookup[forwarder].insert(currFunc);
 
             if (func_to_va[forwarder] != 0) {
                 ULONGLONG va = func_to_va[forwarder];
@@ -111,7 +111,7 @@ size_t make_lookup_tables(std::string moduleName, ULONGLONG remoteBase, PVOID mo
             func_to_va[currFunc] = va;
 
             //resolve forwarders of this function (if any):
-            resolve_forwarders(va, currFunc, forwarders_lookup2, va_to_func, func_to_va);
+            resolve_forwarders(va, currFunc, forwarders_lookup, va_to_func, func_to_va);
         }
     }
     return forwarded_ctr;

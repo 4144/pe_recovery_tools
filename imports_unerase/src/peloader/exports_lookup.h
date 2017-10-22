@@ -20,7 +20,7 @@ std::string getFuncName(const std::string& str);
 std::string formatDllFunc(const std::string& str);
 
 size_t make_lookup_tables(std::string moduleName, ULONGLONG remoteBase, PVOID modulePtr, 
-                                std::map<ExportedFunc, std::set<ExportedFunc>> &forwarders_lookup2,
+                                std::map<ExportedFunc, std::set<ExportedFunc>> &forwarders_lookup,
                                 std::map<ULONGLONG, std::set<ExportedFunc>> &va_to_func,
                                 std::map<ExportedFunc, ULONGLONG> &func_to_va
                                 );

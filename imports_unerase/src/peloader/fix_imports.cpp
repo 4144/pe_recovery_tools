@@ -32,6 +32,66 @@ LPVOID search_name(std::string name, const char* modulePtr, size_t moduleSize)
     return NULL;
 }
 
+bool findNameInBinaryAndFill(LPVOID modulePtr, size_t moduleSize,
+                      IMAGE_IMPORT_DESCRIPTOR* lib_desc,
+                      LPVOID call_via_ptr,
+                      std::map<ULONGLONG, std::set<ExportedFunc, FuncNameLengthCompare>> &addr_to_func
+                      )
+{
+    if (call_via_ptr == NULL || modulePtr == NULL || lib_desc == NULL) {
+        return false; //malformed input
+    }
+    DWORD *call_via_val = (DWORD*)call_via_ptr;
+    if (*call_via_val == 0) {
+        //nothing to fill, probably the last record
+        return false;
+    }
+    ULONGLONG searchedAddr = ULONGLONG(*call_via_val);
+    bool is_name_saved = false;
+
+    DWORD lastOrdinal = 0; //store also ordinal of the matching function
+    std::set<ExportedFunc, FuncNameLengthCompare>::iterator funcname_itr = addr_to_func[searchedAddr].begin();
+
+    for (funcname_itr = addr_to_func[searchedAddr].begin(); 
+        funcname_itr != addr_to_func[searchedAddr].end(); 
+        funcname_itr++) 
+    {
+        const ExportedFunc &found_func = *funcname_itr;
+        lastOrdinal = found_func.funcOrdinal;
+
+        const char* names_start = ((const char*) modulePtr + lib_desc->Name);
+        BYTE* found_ptr = (BYTE*) search_name(found_func.funcName, names_start, moduleSize - (names_start - (const char*)modulePtr));
+        if (!found_ptr) {
+            //name not found in the binary
+            //TODO: maybe it is imported by ordinal?
+            continue;
+        }
+        const DWORD offset = static_cast<DWORD>((ULONGLONG)found_ptr - (ULONGLONG)modulePtr);
+
+        //if it is not the first name from the list, inform about it:
+        if (funcname_itr != addr_to_func[searchedAddr].begin()) {
+            printf(">[*][%llx] %s\n", searchedAddr, found_func.funcName.c_str());
+        }
+        printf("[+] Found the name at: %llx\n", static_cast<ULONGLONG>(offset));
+        const DWORD name_offset = offset - sizeof(WORD);
+        //TODO: validate more...
+        memcpy((BYTE*)call_via_ptr, &name_offset, sizeof(DWORD));
+        printf("[+] Wrote found to offset: %p\n", call_via_ptr);
+        is_name_saved = true;
+        break;
+    }
+    //name not found or could not be saved - filling the ordinal instead:
+    if (is_name_saved == false) {
+        if (lastOrdinal != 0) {
+            printf("[+] Filling ordinal: %x\n", lastOrdinal);
+            DWORD ord_thunk = lastOrdinal | IMAGE_ORDINAL_FLAG32;
+            memcpy(call_via_ptr, &ord_thunk, sizeof(DWORD)); 
+            is_name_saved = true;
+        }
+    }
+    return is_name_saved;
+}
+
 bool fillImportNames32(IMAGE_IMPORT_DESCRIPTOR* lib_desc, LPVOID modulePtr, size_t moduleSize,
         std::map<ULONGLONG, std::set<ExportedFunc, FuncNameLengthCompare>> &addr_to_func)
 {
@@ -39,6 +99,9 @@ bool fillImportNames32(IMAGE_IMPORT_DESCRIPTOR* lib_desc, LPVOID modulePtr, size
 
     DWORD call_via = lib_desc->FirstThunk;
     if (call_via == NULL) return false;
+
+    size_t processed_imps = 0;
+    size_t recovered_imps = 0;
 
     DWORD thunk_addr = lib_desc->OriginalFirstThunk;
     if (thunk_addr == NULL) {
@@ -70,7 +133,7 @@ bool fillImportNames32(IMAGE_IMPORT_DESCRIPTOR* lib_desc, LPVOID modulePtr, size
         }
 
         std::string found_name = funcname_itr->funcName;
-        printf("[*] %s\n", found_name.c_str());
+        printf("[*][%llx] %s\n", searchedAddr, found_name.c_str());
 
         bool is_name_saved = false;
 
@@ -89,56 +152,25 @@ bool fillImportNames32(IMAGE_IMPORT_DESCRIPTOR* lib_desc, LPVOID modulePtr, size
 
         DWORD lastOrdinal = 0;
         LPSTR func_name_ptr = by_name->Name;
+        bool is_nameptr_valid = validate_ptr(modulePtr, moduleSize, func_name_ptr, found_name.length());
         // try to save the found name under the pointer:
-        if (validate_ptr(modulePtr, moduleSize, func_name_ptr, found_name.length()) == true) {
+        if (is_nameptr_valid == true) {
             memcpy(func_name_ptr, found_name.c_str(), found_name.length());
             printf("[+] Saved\n");
             is_name_saved = true;
         } else {
             // try to find the offset to the name in the module:
-            for (funcname_itr = addr_to_func[searchedAddr].begin(); 
-                funcname_itr != addr_to_func[searchedAddr].end(); 
-                funcname_itr++) 
-            {
-                const ExportedFunc &found_func = *funcname_itr;
-                lastOrdinal = found_func.funcOrdinal;
-
-                const char* names_start = ((const char*) modulePtr + lib_desc->Name);
-                BYTE* found_ptr = (BYTE*) search_name(found_func.funcName, names_start, moduleSize - (names_start - (const char*)modulePtr));
-                if (!found_ptr) {
-                    //name not found in the binary
-                    //TODO: maybe it is imported by ordinal?
-                    continue;
-                }
-                const DWORD offset = static_cast<DWORD>((ULONGLONG)found_ptr - (ULONGLONG)modulePtr);
-
-                //if it is not the first name from the list, inform about it:
-                if (funcname_itr != addr_to_func[searchedAddr].begin()) {
-                    printf("[*] %s\n", found_func.funcName.c_str());
-                }
-                printf("[+] Found the name at: %llx\n", static_cast<ULONGLONG>(offset));
-                const DWORD name_offset = offset - sizeof(WORD);
-                //TODO: validate more...
-                memcpy(call_via_ptr, &name_offset, sizeof(DWORD)); 
-                is_name_saved = true;
-            }
-
-            if (!is_name_saved) {
-                printf("[-] Cannot save! Invalid pointer to the function name!\n");
-                if (lastOrdinal != 0) {
-                    printf("Ordinal: %x\n", lastOrdinal);
-                    DWORD ord_thunk = lastOrdinal | IMAGE_ORDINAL_FLAG32;
-                    memcpy(call_via_ptr, &ord_thunk, sizeof(DWORD)); 
-                }
-                //TODO: create a new section to store the names
-            }
+            is_name_saved = findNameInBinaryAndFill(modulePtr, moduleSize, lib_desc, call_via_ptr, addr_to_func);
         }
 
         call_via += sizeof(DWORD);
         thunk_addr += sizeof(DWORD);
+        processed_imps++;
+        if (is_name_saved) recovered_imps++;
+
     } while (true);
 
-    return true;
+    return (recovered_imps == processed_imps);
 }
 
 size_t findAddressesToFill32(DWORD call_via, DWORD thunk_addr, LPVOID modulePtr, OUT std::set<ULONGLONG> &addresses)

@@ -20,7 +20,8 @@ struct FuncNameLengthCompare
 LPVOID search_name(std::string name, const char* modulePtr, size_t moduleSize)
 {
     const char* namec = name.c_str();
-    const char* found_ptr = std::search(modulePtr, modulePtr + moduleSize, namec, namec + name.length());
+    const size_t searched_len =  name.length() + 1; // with terminating NULL
+    const char* found_ptr = std::search(modulePtr, modulePtr + moduleSize, namec, namec + searched_len);
     if (found_ptr == NULL) {
         return NULL;
     }

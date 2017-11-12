@@ -1,10 +1,12 @@
 #include "exported_func.h"
 
 #include <algorithm>
+#include <sstream>
+#include <iomanip>
 
 char easytolower(char in)
 {
-    if(in<='Z' && in>='A')
+    if (in<='Z' && in>='A')
     return in-('Z'-'z');
     return in;
 }
@@ -102,7 +104,15 @@ std::string ExportedFunc::formatName(std::string name)
 
 std::string ExportedFunc::toString() const
 {
-    char str[MAX_PATH*2] = { 0 }; //TODO: implement it in a better way
-    sprintf(str,"%s.%s %x", this->libName.c_str(), this->funcName.c_str(), this->funcOrdinal);
-    return str;
+    std::stringstream stream;
+    stream << this->libName;
+    stream << ".";
+    if (!this->isByOrdinal) {
+        stream << this->funcName;
+        stream << " ";
+    }
+    stream << "<";
+    stream << std::hex << this->funcOrdinal;
+    stream << ">";
+    return stream.str();
 }

@@ -9,28 +9,8 @@
 #include "peloader/pe_raw_to_virtual.h"
 #include "peloader/fix_imports.h"
 
-size_t enum_modules_in_process(DWORD process_id, std::map<ULONGLONG, MODULEENTRY32> &modulesMap)
-{
-    HANDLE hProcessSnapShot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, process_id);
-    MODULEENTRY32 module_entry = { 0 };
-    module_entry.dwSize = sizeof(module_entry);
-	
-    if (!Module32First(hProcessSnapShot, &module_entry)) {
-        printf("[ERROR] Fetching modules failed!\n");
-        return 0;
-    }
-    size_t modules = 1;
-    modulesMap[(ULONGLONG) module_entry.modBaseAddr] = module_entry;
 
-    while (Module32Next(hProcessSnapShot, &module_entry)) {
-        modulesMap[(ULONGLONG) module_entry.modBaseAddr] = module_entry;
-        modules++;
-    }
-
-    // Close the handle
-    CloseHandle(hProcessSnapShot);
-    return modules;
-}
+#ifdef _DEBUG
 
 void print_va_to_func(std::map<ULONGLONG, std::set<ExportedFunc>> &va_to_func)
 {
@@ -92,6 +72,30 @@ void print_forwarders(std::map<ExportedFunc, std::set<ExportedFunc>> &forwarders
     }
 }
 
+#endif //_DEBUG
+
+size_t enum_modules_in_process(DWORD process_id, std::map<ULONGLONG, MODULEENTRY32> &modulesMap)
+{
+    HANDLE hProcessSnapShot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, process_id);
+    MODULEENTRY32 module_entry = { 0 };
+    module_entry.dwSize = sizeof(module_entry);
+	
+    if (!Module32First(hProcessSnapShot, &module_entry)) {
+        printf("[ERROR] Fetching modules failed!\n");
+        return 0;
+    }
+    size_t modules = 1;
+    modulesMap[(ULONGLONG) module_entry.modBaseAddr] = module_entry;
+
+    while (Module32Next(hProcessSnapShot, &module_entry)) {
+        modulesMap[(ULONGLONG) module_entry.modBaseAddr] = module_entry;
+        modules++;
+    }
+
+    // Close the handle
+    CloseHandle(hProcessSnapShot);
+    return modules;
+}
 
 bool prepare_mapping(DWORD pid, std::map<ULONGLONG, std::set<ExportedFunc>> &va_to_func)
 {
@@ -123,11 +127,11 @@ bool prepare_mapping(DWORD pid, std::map<ULONGLONG, std::set<ExportedFunc>> &va_
         }
         VirtualFree(mappedDLL, v_size, MEM_FREE);
     }
-    /*
+#ifdef _DEBUG
     print_va_to_func(va_to_func); //TEST
     print_func_to_rva(func_to_va); //TEST
-    print_forwarders(forwarders_lookup2); //TEST
-    */
+    print_forwarders(forwarders_lookup); //TEST
+#endif
     printf("Found forwarding DLLs: %d\n", forwarding_dlls);
     return true;
 }
@@ -158,7 +162,7 @@ BYTE* load_file(char *filename, size_t &size)
 int main(int argc, char *argv[])
 {
     char *default_out_file = "out.bin";
-    char *version = "0.1.8-refact";
+    char *version = "0.1.9";
     ULONGLONG loadBase = 0;
     if (argc < 3) {
         printf("[Imports_Unerase v%s]\n", version);

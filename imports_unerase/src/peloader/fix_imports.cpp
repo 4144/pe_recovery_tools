@@ -3,25 +3,25 @@
 
 #define MIN_DLL_LEN 5
 
-struct StringLengthCompare
+struct FuncNameLengthCompare
 {
-    bool operator() (const std::string & p_lhs, const std::string & p_rhs)
+    bool operator() (const ExportedFunc &p_lhs, const ExportedFunc &p_rhs)
     {
-        const size_t lhsLength = p_lhs.length();
-        const size_t rhsLength = p_rhs.length();
+        const size_t lhsLength = p_lhs.funcName.length();
+        const size_t rhsLength = p_rhs.funcName.length();
 
         if (lhsLength == rhsLength) {
-            return (p_lhs < p_rhs);
+            return (p_lhs.funcName.compare(p_rhs.funcName));
         }
         return (lhsLength < rhsLength); // compares with the length
     }
 };
 
-
 LPVOID search_name(std::string name, const char* modulePtr, size_t moduleSize)
 {
     const char* namec = name.c_str();
-    const char* found_ptr = std::search(modulePtr, modulePtr + moduleSize, namec, namec + name.length());
+    const size_t searched_len =  name.length() + 1; // with terminating NULL
+    const char* found_ptr = std::search(modulePtr, modulePtr + moduleSize, namec, namec + searched_len);
     if (found_ptr == NULL) {
         return NULL;
     }
@@ -32,13 +32,76 @@ LPVOID search_name(std::string name, const char* modulePtr, size_t moduleSize)
     return NULL;
 }
 
+bool findNameInBinaryAndFill(LPVOID modulePtr, size_t moduleSize,
+                      IMAGE_IMPORT_DESCRIPTOR* lib_desc,
+                      LPVOID call_via_ptr,
+                      std::map<ULONGLONG, std::set<ExportedFunc, FuncNameLengthCompare>> &addr_to_func
+                      )
+{
+    if (call_via_ptr == NULL || modulePtr == NULL || lib_desc == NULL) {
+        return false; //malformed input
+    }
+    DWORD *call_via_val = (DWORD*)call_via_ptr;
+    if (*call_via_val == 0) {
+        //nothing to fill, probably the last record
+        return false;
+    }
+    ULONGLONG searchedAddr = ULONGLONG(*call_via_val);
+    bool is_name_saved = false;
+
+    DWORD lastOrdinal = 0; //store also ordinal of the matching function
+    std::set<ExportedFunc, FuncNameLengthCompare>::iterator funcname_itr = addr_to_func[searchedAddr].begin();
+
+    for (funcname_itr = addr_to_func[searchedAddr].begin(); 
+        funcname_itr != addr_to_func[searchedAddr].end(); 
+        funcname_itr++) 
+    {
+        const ExportedFunc &found_func = *funcname_itr;
+        lastOrdinal = found_func.funcOrdinal;
+
+        const char* names_start = ((const char*) modulePtr + lib_desc->Name);
+        BYTE* found_ptr = (BYTE*) search_name(found_func.funcName, names_start, moduleSize - (names_start - (const char*)modulePtr));
+        if (!found_ptr) {
+            //name not found in the binary
+            //TODO: maybe it is imported by ordinal?
+            continue;
+        }
+        const DWORD offset = static_cast<DWORD>((ULONGLONG)found_ptr - (ULONGLONG)modulePtr);
+
+        //if it is not the first name from the list, inform about it:
+        if (funcname_itr != addr_to_func[searchedAddr].begin()) {
+            printf(">[*][%llx] %s\n", searchedAddr, found_func.funcName.c_str());
+        }
+        printf("[+] Found the name at: %llx\n", static_cast<ULONGLONG>(offset));
+        const DWORD name_offset = offset - sizeof(WORD);
+        //TODO: validate more...
+        memcpy((BYTE*)call_via_ptr, &name_offset, sizeof(DWORD));
+        printf("[+] Wrote found to offset: %p\n", call_via_ptr);
+        is_name_saved = true;
+        break;
+    }
+    //name not found or could not be saved - filling the ordinal instead:
+    if (is_name_saved == false) {
+        if (lastOrdinal != 0) {
+            printf("[+] Filling ordinal: %x\n", lastOrdinal);
+            DWORD ord_thunk = lastOrdinal | IMAGE_ORDINAL_FLAG32;
+            memcpy(call_via_ptr, &ord_thunk, sizeof(DWORD)); 
+            is_name_saved = true;
+        }
+    }
+    return is_name_saved;
+}
+
 bool fillImportNames32(IMAGE_IMPORT_DESCRIPTOR* lib_desc, LPVOID modulePtr, size_t moduleSize,
-        std::map<ULONGLONG, std::set<std::string, StringLengthCompare>> &addr_to_func)
+        std::map<ULONGLONG, std::set<ExportedFunc, FuncNameLengthCompare>> &addr_to_func)
 {
     if (lib_desc == NULL) return false;
 
     DWORD call_via = lib_desc->FirstThunk;
     if (call_via == NULL) return false;
+
+    size_t processed_imps = 0;
+    size_t recovered_imps = 0;
 
     DWORD thunk_addr = lib_desc->OriginalFirstThunk;
     if (thunk_addr == NULL) {
@@ -60,17 +123,17 @@ bool fillImportNames32(IMAGE_IMPORT_DESCRIPTOR* lib_desc, LPVOID modulePtr, size
         }
 
         ULONGLONG searchedAddr = ULONGLONG(*call_via_val);
-        
-        if (addr_to_func[searchedAddr].size() == 0) {
+        std::set<ExportedFunc, FuncNameLengthCompare>::iterator funcname_itr = addr_to_func[searchedAddr].begin();
+
+        if (addr_to_func[searchedAddr].begin() == addr_to_func[searchedAddr].end()) {
             printf("[-] Function not found: %X\n", searchedAddr);
             call_via += sizeof(DWORD);
             thunk_addr += sizeof(DWORD);
             continue;
         }
 
-        std::set<std::string, StringLengthCompare>::iterator funcname_itr = addr_to_func[searchedAddr].begin();
-        std::string found_name = *funcname_itr;
-        printf("[*] %s\n", found_name.c_str());
+        std::string found_name = funcname_itr->funcName;
+        printf("[*][%llx] %s\n", searchedAddr, found_name.c_str());
 
         bool is_name_saved = false;
 
@@ -87,51 +150,27 @@ bool fillImportNames32(IMAGE_IMPORT_DESCRIPTOR* lib_desc, LPVOID modulePtr, size
             continue;
         }
 
+        DWORD lastOrdinal = 0;
         LPSTR func_name_ptr = by_name->Name;
+        bool is_nameptr_valid = validate_ptr(modulePtr, moduleSize, func_name_ptr, found_name.length());
         // try to save the found name under the pointer:
-        if (validate_ptr(modulePtr, moduleSize, func_name_ptr, found_name.length()) == true) {
+        if (is_nameptr_valid == true) {
             memcpy(func_name_ptr, found_name.c_str(), found_name.length());
             printf("[+] Saved\n");
             is_name_saved = true;
         } else {
             // try to find the offset to the name in the module:
-            for (funcname_itr = addr_to_func[searchedAddr].begin(); 
-                funcname_itr != addr_to_func[searchedAddr].end(); 
-                funcname_itr++) 
-            {
-                found_name = *funcname_itr;
-
-                const char* names_start = ((const char*) modulePtr + lib_desc->Name);
-                BYTE* found_ptr = (BYTE*) search_name(found_name, names_start, moduleSize - (names_start - (const char*)modulePtr));
-                if (!found_ptr) {
-                    //name not found in the binary
-                    //TODO: maybe it is imported by ordinal?
-                    continue;
-                }
-                DWORD offset = static_cast<DWORD>((ULONGLONG)found_ptr - (ULONGLONG)modulePtr);
-
-                //if it is not the first name from the list, inform about it:
-                if (funcname_itr != addr_to_func[searchedAddr].begin()) {
-                    printf("[*] %s\n", found_name.c_str());
-                }
-                printf("[+] Found the name at: %llx\n", static_cast<ULONGLONG>(offset));
-                offset -= sizeof(WORD);
-                //TODO: validate more...
-                memcpy(call_via_ptr, &offset, sizeof(DWORD)); 
-                is_name_saved = true;
-            }
-
-            if (!is_name_saved) {
-                printf("[-] Cannot save! Invalid pointer to the function name!\n");
-                //TODO: create a new section to store the names
-            }
+            is_name_saved = findNameInBinaryAndFill(modulePtr, moduleSize, lib_desc, call_via_ptr, addr_to_func);
         }
 
         call_via += sizeof(DWORD);
         thunk_addr += sizeof(DWORD);
+        processed_imps++;
+        if (is_name_saved) recovered_imps++;
+
     } while (true);
 
-    return true;
+    return (recovered_imps == processed_imps);
 }
 
 size_t findAddressesToFill32(DWORD call_via, DWORD thunk_addr, LPVOID modulePtr, OUT std::set<ULONGLONG> &addresses)
@@ -161,7 +200,7 @@ size_t findAddressesToFill32(DWORD call_via, DWORD thunk_addr, LPVOID modulePtr,
     return addrCounter;
 }
 
-std::string findDllName(std::set<ULONGLONG> &addresses, std::map<ULONGLONG, std::set<std::string>> &va_to_names)
+std::string findDllName(std::set<ULONGLONG> &addresses, std::map<ULONGLONG, std::set<ExportedFunc>> &va_to_func)
 {
     std::set<std::string> dllNames;
     bool isFresh = true;
@@ -170,18 +209,16 @@ std::string findDllName(std::set<ULONGLONG> &addresses, std::map<ULONGLONG, std:
     for (addrItr = addresses.begin(); addrItr != addresses.end(); addrItr++) {
         ULONGLONG searchedAddr = *addrItr;
         //---
-        std::map<ULONGLONG, std::set<std::string>>::iterator fItr1 = va_to_names.find(searchedAddr);
+        std::map<ULONGLONG, std::set<ExportedFunc>>::iterator fItr1 = va_to_func.find(searchedAddr);
         
-        if (fItr1 != va_to_names.end()) {
+        if (fItr1 != va_to_func.end()) {
             std::set<std::string> currDllNames;
 
-            for (std::set<std::string>::iterator strItr = fItr1->second.begin(); 
+            for (std::set<ExportedFunc>::iterator strItr = fItr1->second.begin(); 
                 strItr != fItr1->second.end(); 
                 strItr++)
             {
-                std::string dll_name = getDllName(*strItr);
-
-                std::string imp_dll_name = getDllName(*strItr);
+                std::string imp_dll_name = strItr->libName;
                 currDllNames.insert(imp_dll_name);
             }
 
@@ -206,8 +243,8 @@ std::string findDllName(std::set<ULONGLONG> &addresses, std::map<ULONGLONG, std:
 
 size_t mapAddressesToFunctions(std::set<ULONGLONG> &addresses, 
                                std::string coveringDll, 
-                               std::map<ULONGLONG, std::set<std::string>> &va_to_names, 
-                               OUT std::map<ULONGLONG, std::set<std::string, StringLengthCompare>> &addr_to_func
+                               std::map<ULONGLONG, std::set<ExportedFunc>> &va_to_func, 
+                               OUT std::map<ULONGLONG, std::set<ExportedFunc, FuncNameLengthCompare>> &addr_to_func
                                )
 {
     size_t coveredCount = 0;
@@ -216,19 +253,20 @@ size_t mapAddressesToFunctions(std::set<ULONGLONG> &addresses,
 
         ULONGLONG searchedAddr = *addrItr;
         //---
-        std::map<ULONGLONG, std::set<std::string>>::iterator fItr1 = va_to_names.find(searchedAddr);
+        std::map<ULONGLONG, std::set<ExportedFunc>>::iterator fItr1 = va_to_func.find(searchedAddr);
         
-        if (fItr1 != va_to_names.end()) {
+        if (fItr1 != va_to_func.end()) {
             std::set<std::string> currDllNames;
 
-            for (std::set<std::string>::iterator strItr = fItr1->second.begin(); 
+            for (std::set<ExportedFunc>::iterator strItr = fItr1->second.begin(); 
                 strItr != fItr1->second.end(); 
                 strItr++)
             {
-                std::string dll_name = getDllName(*strItr);
+                ExportedFunc func = *strItr;
+                std::string dll_name = strItr->libName;
                 if (dll_name == coveringDll) {
-                    std::string funcName = getFuncName(*strItr);
-                    addr_to_func[searchedAddr].insert(funcName);
+                    //std::string funcName = strItr->funcName;
+                    addr_to_func[searchedAddr].insert(func);
                     coveredCount++;
                 }
             }
@@ -237,7 +275,7 @@ size_t mapAddressesToFunctions(std::set<ULONGLONG> &addresses,
     return coveredCount;
 }
 
-bool fixImports(PVOID modulePtr, size_t moduleSize, std::map<ULONGLONG, std::set<std::string>> va_to_names)
+bool fixImports(PVOID modulePtr, size_t moduleSize, std::map<ULONGLONG, std::set<ExportedFunc>> &va_to_func)
 {
     bool is64 = is64bit((BYTE*)modulePtr);
 
@@ -282,7 +320,7 @@ bool fixImports(PVOID modulePtr, size_t moduleSize, std::map<ULONGLONG, std::set
         }
         if (lib_name.length() == 0) {
             printf("Erased DLL name\n");
-            lib_name = findDllName(addresses, va_to_names);
+            lib_name = findDllName(addresses, va_to_func);
             if (lib_name.length() != 0) {
                 std::string found_name = lib_name + ".dll";
                 name_ptr = (LPSTR)((ULONGLONG) modulePtr + lib_desc->Name);
@@ -301,10 +339,10 @@ bool fixImports(PVOID modulePtr, size_t moduleSize, std::map<ULONGLONG, std::set
             return false;
         }
         printf("# %s\n", lib_name.c_str());
-        OUT std::map<ULONGLONG, std::set<std::string, StringLengthCompare>> addr_to_func;
-        size_t coveredCount = mapAddressesToFunctions(addresses, lib_name, va_to_names, addr_to_func); 
-        if (coveredCount != addresses.size()) {
-            printf("[-] Not all addresses are covered!\n");
+        OUT std::map<ULONGLONG, std::set<ExportedFunc, FuncNameLengthCompare>> addr_to_func;
+        size_t coveredCount = mapAddressesToFunctions(addresses, lib_name, va_to_func, addr_to_func); 
+        if (coveredCount < addresses.size()) {
+            printf("[-] Not all addresses are covered! covered: %d total: %d\n", static_cast<int>(coveredCount), static_cast<int>(addresses.size()));
         } else {
             printf("All covered!\n");
         }

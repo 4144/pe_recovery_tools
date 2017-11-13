@@ -9,6 +9,71 @@
 #include "peloader/pe_raw_to_virtual.h"
 #include "peloader/fix_imports.h"
 
+
+#ifdef _DEBUG
+
+void print_va_to_func(std::map<ULONGLONG, std::set<ExportedFunc>> &va_to_func)
+{
+    static FILE *fp = fopen("va_to_func.txt", "a+");
+
+    std::map<ULONGLONG, std::set<ExportedFunc>>::iterator mItr;
+    for (mItr = va_to_func.begin(); mItr != va_to_func.end(); mItr++) {
+        ULONGLONG va = mItr->first;
+        std::set<ExportedFunc> &funcSet = mItr->second;
+        std::set<ExportedFunc>::iterator sItr;
+        for (sItr = funcSet.begin(); sItr != funcSet.end(); sItr++) {
+            const ExportedFunc &func = *sItr;
+            std::string str = func.toString();
+            if (fp) {
+                fprintf(fp, "[%llx] %s\n", va, str.c_str());
+                fflush(fp);
+            }
+        }
+    }
+}
+
+void print_func_to_rva(std::map<ExportedFunc, ULONGLONG> &func_to_va)
+{
+    static FILE *fp = fopen("func_to_rva.txt", "a+");
+
+    std::map<ExportedFunc, ULONGLONG>::iterator mItr;
+    for (mItr = func_to_va.begin(); mItr != func_to_va.end(); mItr++) {
+        const ExportedFunc &func = mItr->first;
+        const ULONGLONG va = mItr->second;
+        std::string str = func.toString();
+
+        if (fp) {
+            fprintf(fp, "[%llx] %s\n", va, str.c_str());
+            fflush(fp);
+        }
+    }
+}
+
+void print_forwarders(std::map<ExportedFunc, std::set<ExportedFunc>> &forwarders_lookup2)
+{
+    static FILE *fp = fopen("forwarders.txt", "a+");
+
+    std::map<ExportedFunc, std::set<ExportedFunc>>::iterator mItr;
+    for (mItr = forwarders_lookup2.begin(); mItr != forwarders_lookup2.end(); mItr++) {
+        const ExportedFunc &func = mItr->first;
+
+        const std::set<ExportedFunc> &fwdSet = mItr->second;
+        std::string str = func.toString();
+        if (fp) {
+            fprintf(fp, "> %s : %d\n", str.c_str(), fwdSet.size());
+            fflush(fp);
+        }
+        std::set<ExportedFunc>::iterator sItr;
+        for (sItr = fwdSet.begin(); sItr != fwdSet.end(); sItr++) {
+            const ExportedFunc &fwdFunc = *sItr;
+            std::string fwdStr = fwdFunc.toString();
+            fprintf(fp, "- %s\n", fwdStr.c_str());
+        }
+    }
+}
+
+#endif //_DEBUG
+
 size_t enum_modules_in_process(DWORD process_id, std::map<ULONGLONG, MODULEENTRY32> &modulesMap)
 {
     HANDLE hProcessSnapShot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, process_id);
@@ -32,11 +97,8 @@ size_t enum_modules_in_process(DWORD process_id, std::map<ULONGLONG, MODULEENTRY
     return modules;
 }
 
-bool prepare_mapping(DWORD pid, std::map<ULONGLONG, std::set<std::string>> &va_to_names)
+bool prepare_mapping(DWORD pid, std::map<ULONGLONG, std::set<ExportedFunc>> &va_to_func)
 {
-    std::map<std::string, std::set<std::string>> forwarders_lookup;
-    std::map<std::string, ULONGLONG> name_to_va;
-
     std::map<ULONGLONG, MODULEENTRY32> modulesMap;
     int num = enum_modules_in_process(pid, modulesMap);
     if (num == 0) {
@@ -45,6 +107,9 @@ bool prepare_mapping(DWORD pid, std::map<ULONGLONG, std::set<std::string>> &va_t
 
     printf("Mapped modules: %d\n", num);
     size_t forwarding_dlls = 0;
+
+    std::map<ExportedFunc, std::set<ExportedFunc>> forwarders_lookup;
+    std::map<ExportedFunc, ULONGLONG> func_to_va;
 
     std::map<ULONGLONG, MODULEENTRY32>::iterator itr1;
     for (itr1 = modulesMap.begin(); itr1 != modulesMap.end(); itr1++) {
@@ -55,12 +120,18 @@ bool prepare_mapping(DWORD pid, std::map<ULONGLONG, std::set<std::string>> &va_t
             continue;
         }
         ULONGLONG remoteBase = (ULONGLONG) itr1->second.modBaseAddr;
-        size_t forwarded_ctr = make_lookup_tables(itr1->second.szExePath, remoteBase, mappedDLL, forwarders_lookup, va_to_names, name_to_va);
+
+        size_t forwarded_ctr = make_lookup_tables(itr1->second.szExePath, remoteBase, mappedDLL, forwarders_lookup, va_to_func, func_to_va);
         if (forwarded_ctr) {
             forwarding_dlls++;
         }
         VirtualFree(mappedDLL, v_size, MEM_FREE);
     }
+#ifdef _DEBUG
+    print_va_to_func(va_to_func); //TEST
+    print_func_to_rva(func_to_va); //TEST
+    print_forwarders(forwarders_lookup); //TEST
+#endif
     printf("Found forwarding DLLs: %d\n", forwarding_dlls);
     return true;
 }
@@ -91,7 +162,7 @@ BYTE* load_file(char *filename, size_t &size)
 int main(int argc, char *argv[])
 {
     char *default_out_file = "out.bin";
-    char *version = "0.1.7";
+    char *version = "0.1.9";
     ULONGLONG loadBase = 0;
     if (argc < 3) {
         printf("[Imports_Unerase v%s]\n", version);
@@ -113,14 +184,14 @@ int main(int argc, char *argv[])
     if (pid == 0) pid = GetCurrentProcessId();
     printf("PID: %d\n", pid);
 
-    std::map<ULONGLONG, std::set<std::string>> va_to_names;
-    bool isOk = prepare_mapping(pid, va_to_names);
+    std::map<ULONGLONG, std::set<ExportedFunc>> va_to_func;
+    bool isOk = prepare_mapping(pid, va_to_func);
     if (!isOk) {
         printf("[-] Mapping failed.\n");
         system("pause");
         return -1;
     }
-
+    
     size_t size = 0;
     BYTE* buffer = load_file(argv[2], size);
     if (buffer == NULL) {
@@ -129,7 +200,7 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    if (fixImports(buffer, size, va_to_names) == false) {
+    if (fixImports(buffer, size, va_to_func) == false) {
         printf("[ERROR] Cannot reconstruct imports!\n");
         system("pause");
         return -1;
@@ -142,6 +213,7 @@ int main(int argc, char *argv[])
         printf("[+] Saved output to: %s\n", out_filename);
     }
     VirtualFree(buffer, size, MEM_FREE);
+    
     system("pause");
     return 0;
 }
